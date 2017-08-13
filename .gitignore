@@ -1,0 +1,5 @@
+.Rproj.user
+.Rhistory
+!*.html
+!*.tar
+!*.gz

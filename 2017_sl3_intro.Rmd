@@ -1,0 +1,265 @@
+---
+title: "The `sl3` R Package"
+subtitle: "A fresh approach to Super Learning"
+author: "[Jeremy Coyle]() & [Nima Hejazi](http://nimahejazi.org)"
+date: "`r lubridate::now()`"
+output:
+  xaringan::moon_reader:
+    lib_dir: libs
+    chakra: libs/remark-latest.min.js
+    css: ["default", "custom.css"]
+    nature:
+      highlightStyle: zenburn
+      highlightLines: true
+---
+
+```{r knitr_setup, echo=FALSE, message=FALSE}
+knitr::opts_chunk$set(fig.width = 7, fig.height = 4.5, dpi = 300,
+                      fig.cap = "", fig.align = "center")
+showtext::showtext.opts(dpi = 300)
+```
+
+# Accessing these slides
+
+--
+
+### View online:
+[goo.gl/HZzosu](https://goo.gl/HZzosu)
+
+--
+
+### Via git:
+
+```{bash, eval=FALSE}
+git clone -b talk https://github.com/jeremyrcoyle/sl3.git
+```
+
+???
+
+- This talk will focus on introducing the new `sl3` R package, which provides a
+modern implementation of the Super Learner algorithm [@vdl2007super], a method
+for performing stacked regressions [@breiman1996stacked] and combining this with
+covariate screening and cross-validation.
+
+- In particular, we will look at the benefits that an object-oriented design
+(using the R6 framework) has on...
+
+---
+class: inverse, center, middle
+
+# `sl3`: Core Design
+
+---
+
+# R6, R6, ...
+
+## Why?
+
+--
+
+- ...
+
+--
+
+- ...
+
+--
+
+- ...
+
+???
+
+- talk 1
+
+- talk 2
+
+---
+
+# Core `sl3` Architecture
+
+## Core classes
+
+- `lrnr_base`
+
+--
+
+- `Pipeline`
+
+--
+
+- `Stack`
+
+???
+
+- talk 1
+
+- talk 2
+
+---
+class: inverse, center, middle
+
+# Using `sl3`
+
+## There ain't nothin' like a test drive...
+
+---
+
+# Get the package
+
+```{r install_pkg, message=FALSE, eval=FALSE}
+if (!("sl3" %in% installed.packages())) {
+  devtools::install_github("jeremyrcoyle/sl3")
+}
+```
+
+```{r prelims-pkgs, message=FALSE, echo=FALSE}
+set.seed(49753)
+suppressMessages(library(data.table))
+library(dplyr)
+library(origami)
+library(SuperLearner)
+library(sl3)
+```
+
+---
+
+# Set up Data
+
+```{r prelims-data, message=FALSE}
+library(sl3)
+
+# load example data set
+data(cpp)
+cpp <- cpp %>%
+  dplyr::filter(!is.na(haz)) %>%
+  mutate_all(funs(replace(., is.na(.), 0)))
+
+# here are the covariates we are interested in, and the outcome of course
+covars <- c("apgar1", "apgar5", "parity", "gagebrth", "mage", "meducyrs",
+            "sexn")
+outcome <- "haz"
+```
+
+--
+
+???
+
+- A working implementation of a targeted learning approach to biomarker
+discovery using moderated statistics.
+
+- Next, we'll walk through analyzing some data.
+
+---
+
+# Setting up a `task`
+
+```{r sl3-task-setup, message=FALSE}
+task <- sl3_Task$new(cpp, covariates = covars, outcome = outcome)
+```
+
+--
+
+Data is in the nodes...
+
+```{r sl3-task-nodes, message=FALSE}
+task$nodes
+```
+
+???
+
+- talk about tasks
+
+---
+
+# Screeners, learners, and pipelines
+
+```{r sl3-core-1, message=FALSE}
+# an elastic net screener, using the Super Learner package
+slscreener <- Lrnr_pkg_SuperLearner_screener$new("screen.glmnet")
+
+# a GLM learning algorithm, comes built-in with sl3
+glm_learner <- Lrnr_glm$new()
+
+# put them together in a pipeline
+screen_and_glm <- Pipeline$new(slscreener, glm_learner)
+```
+
+---
+
+```{r, message=FALSE}
+sg_fit <- screen_and_glm$train(task)
+print(sg_fit)
+```
+
+---
+
+```{r, message=FALSE}
+SL.glmnet_learner <- Lrnr_pkg_SuperLearner$new(SL_wrapper = "SL.glmnet")
+
+learner_stack <- Stack$new(SL.glmnet_learner, glm_learner, screen_and_glm)
+stack_fit <- learner_stack$train(task)
+```
+
+---
+
+```{r, message=FALSE}
+preds <- stack_fit$predict()
+head(preds)
+```
+
+???
+
+- ...
+
+- ...
+
+---
+
+# Cross-validation
+
+```{r, message=FALSE}
+cv_stack <- Lrnr_cv$new(learner_stack)
+cv_fit <- cv_stack$train(task)
+```
+
+---
+
+```{r, message=FALSE}
+glm_stack <- Pipeline$new(cv_stack, glm_learner)
+ml_fit <- glm_stack$train(task)
+print(ml_fit)
+```
+
+???
+
+- ...
+
+- ...
+
+---
+
+# ...
+
+```{r, message=FALSE}
+
+```
+
+???
+
+- ...
+
+- ...
+
+---
+class: center, middle
+
+# Thanks!
+
+We have a great team: Jeremy Coyle, Nima Hejazi, Ivana Malenica, Oleg Sofrygin.
+
+Slides created via the R package
+[**xaringan**](https://github.com/yihui/xaringan).
+
+Powered by [remark.js](https://remarkjs.com),
+[**knitr**](http://yihui.name/knitr), and
+[R Markdown](https://rmarkdown.rstudio.com).

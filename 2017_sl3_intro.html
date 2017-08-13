@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>The sl3 R Package</title>
+    <meta charset="utf-8">
+    <meta name="author" content="Jeremy Coyle &amp; Nima Hejazi" />
+    <link href="libs/remark-css-0.0.1/example.css" rel="stylesheet" />
+    <link rel="stylesheet" href="custom.css" type="text/css" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# The <code>sl3</code> R Package
+## A fresh approach to Super Learning
+### <a href="">Jeremy Coyle</a> &amp; <a href="http://nimahejazi.org">Nima Hejazi</a>
+### 2017-08-13 15:19:54
+
+---
+
+
+
+
+# Accessing these slides
+
+--
+
+### View online:
+[goo.gl/HZzosu](https://goo.gl/HZzosu)
+
+--
+
+### Via git:
+
+
+```bash
+git clone -b talk https://github.com/jeremyrcoyle/sl3.git
+```
+
+???
+
+- This talk will focus on introducing the new `sl3` R package, which provides a
+modern implementation of the Super Learner algorithm [@vdl2007super], a method
+for performing stacked regressions [@breiman1996stacked] and combining this with
+covariate screening and cross-validation.
+
+- In particular, we will look at the benefits that an object-oriented design
+(using the R6 framework) has on...
+
+---
+class: inverse, center, middle
+
+# `sl3`: Core Design
+
+---
+
+# R6, R6, ...
+
+## Why?
+
+--
+
+- ...
+
+--
+
+- ...
+
+--
+
+- ...
+
+???
+
+- talk 1
+
+- talk 2
+
+---
+
+# Core `sl3` Architecture
+
+## Core classes
+
+- `lrnr_base`
+
+--
+
+- `Pipeline`
+
+--
+
+- `Stack`
+
+???
+
+- talk 1
+
+- talk 2
+
+---
+class: inverse, center, middle
+
+# Using `sl3`
+
+## There ain't nothin' like a test drive...
+
+---
+
+# Get the package
+
+
+```r
+if (!("sl3" %in% installed.packages())) {
+  devtools::install_github("jeremyrcoyle/sl3")
+}
+```
+
+
+
+---
+
+# Set up Data
+
+
+```r
+library(sl3)
+
+# load example data set
+data(cpp)
+cpp &lt;- cpp %&gt;%
+  dplyr::filter(!is.na(haz)) %&gt;%
+  mutate_all(funs(replace(., is.na(.), 0)))
+
+# here are the covariates we are interested in, and the outcome of course
+covars &lt;- c("apgar1", "apgar5", "parity", "gagebrth", "mage", "meducyrs",
+            "sexn")
+outcome &lt;- "haz"
+```
+
+--
+
+???
+
+- A working implementation of a targeted learning approach to biomarker
+discovery using moderated statistics.
+
+- Next, we'll walk through analyzing some data.
+
+---
+
+# Setting up a `task`
+
+
+```r
+task &lt;- sl3_Task$new(cpp, covariates = covars, outcome = outcome)
+```
+
+--
+
+Data is in the nodes...
+
+
+```r
+task$nodes
+```
+
+```
+## $covariates
+## [1] "apgar1"   "apgar5"   "parity"   "gagebrth" "mage"     "meducyrs"
+## [7] "sexn"    
+## 
+## $outcome
+## [1] "haz"
+## 
+## $id
+## NULL
+## 
+## $weights
+## NULL
+```
+
+???
+
+- talk about tasks
+
+---
+
+# Screeners, learners, and pipelines
+
+
+```r
+# an elastic net screener, using the Super Learner package
+slscreener &lt;- Lrnr_pkg_SuperLearner_screener$new("screen.glmnet")
+
+# a GLM learning algorithm, comes built-in with sl3
+glm_learner &lt;- Lrnr_glm$new()
+
+# put them together in a pipeline
+screen_and_glm &lt;- Pipeline$new(slscreener, glm_learner)
+```
+
+---
+
+
+```r
+sg_fit &lt;- screen_and_glm$train(task)
+print(sg_fit)
+```
+
+```
+## $Lrnr_pkg_SuperLearner_screener_screen.glmnet
+## [1] "Lrnr_pkg_SuperLearner_screener_screen.glmnet"
+## $selected
+## [1] "apgar1"   "parity"   "gagebrth" "mage"     "meducyrs" "sexn"    
+## 
+## 
+## $Lrnr_glm
+## [1] "Lrnr_glm"
+## 
+## Call:  glm(formula = Y ~ ., family = gaussian(), data = task$X, weights = task$weights)
+## 
+## Coefficients:
+##                                           (Intercept)  
+##                                             -5.540529  
+##   Lrnr_pkg_SuperLearner_screener_screen.glmnet_apgar1  
+##                                              0.013162  
+##   Lrnr_pkg_SuperLearner_screener_screen.glmnet_parity  
+##                                             -0.081139  
+## Lrnr_pkg_SuperLearner_screener_screen.glmnet_gagebrth  
+##                                              0.019678  
+##     Lrnr_pkg_SuperLearner_screener_screen.glmnet_mage  
+##                                              0.017596  
+## Lrnr_pkg_SuperLearner_screener_screen.glmnet_meducyrs  
+##                                             -0.004884  
+##     Lrnr_pkg_SuperLearner_screener_screen.glmnet_sexn  
+##                                             -0.079807  
+## 
+## Degrees of Freedom: 1440 Total (i.e. Null);  1434 Residual
+## Null Deviance:	    2353 
+## Residual Deviance: 2280 	AIC: 4766
+```
+
+```
+## $learner_fits
+## $learner_fits$Lrnr_pkg_SuperLearner_screener_screen.glmnet
+## [1] "Lrnr_pkg_SuperLearner_screener_screen.glmnet"
+## $selected
+## [1] "apgar1"   "parity"   "gagebrth" "mage"     "meducyrs" "sexn"    
+## 
+## 
+## $learner_fits$Lrnr_glm
+## [1] "Lrnr_glm"
+## 
+## Call:  glm(formula = Y ~ ., family = gaussian(), data = task$X, weights = task$weights)
+## 
+## Coefficients:
+##                                           (Intercept)  
+##                                             -5.540529  
+##   Lrnr_pkg_SuperLearner_screener_screen.glmnet_apgar1  
+##                                              0.013162  
+##   Lrnr_pkg_SuperLearner_screener_screen.glmnet_parity  
+##                                             -0.081139  
+## Lrnr_pkg_SuperLearner_screener_screen.glmnet_gagebrth  
+##                                              0.019678  
+##     Lrnr_pkg_SuperLearner_screener_screen.glmnet_mage  
+##                                              0.017596  
+## Lrnr_pkg_SuperLearner_screener_screen.glmnet_meducyrs  
+##                                             -0.004884  
+##     Lrnr_pkg_SuperLearner_screener_screen.glmnet_sexn  
+##                                             -0.079807  
+## 
+## Degrees of Freedom: 1440 Total (i.e. Null);  1434 Residual
+## Null Deviance:	    2353 
+## Residual Deviance: 2280 	AIC: 4766
+```
+
+---
+
+
+```r
+SL.glmnet_learner &lt;- Lrnr_pkg_SuperLearner$new(SL_wrapper = "SL.glmnet")
+
+learner_stack &lt;- Stack$new(SL.glmnet_learner, glm_learner, screen_and_glm)
+stack_fit &lt;- learner_stack$train(task)
+```
+
+---
+
+
+```r
+preds &lt;- stack_fit$predict()
+head(preds)
+```
+
+```
+##      Lrnr_pkg_SuperLearner_SL.glmnet   Lrnr_glm
+## [1,]                      0.35345519 0.36298498
+## [2,]                      0.35345519 0.36298498
+## [3,]                      0.24554305 0.25993072
+## [4,]                      0.24554305 0.25993072
+## [5,]                      0.24554305 0.25993072
+## [6,]                      0.02953193 0.05680264
+##      Lrnr_pkg_SuperLearner_screener_screen.glmnet___Lrnr_glm
+## [1,]                                              0.36228209
+## [2,]                                              0.36228209
+## [3,]                                              0.25870995
+## [4,]                                              0.25870995
+## [5,]                                              0.25870995
+## [6,]                                              0.05600958
+```
+
+???
+
+- ...
+
+- ...
+
+---
+
+# Cross-validation
+
+
+```r
+cv_stack &lt;- Lrnr_cv$new(learner_stack)
+cv_fit &lt;- cv_stack$train(task)
+```
+
+---
+
+
+```r
+glm_stack &lt;- Pipeline$new(cv_stack, glm_learner)
+ml_fit &lt;- glm_stack$train(task)
+print(ml_fit)
+```
+
+```
+## $CV_Lrnr_pkg_SuperLearner_SL.glmnetxLrnr_glmxLrnr_pkg_SuperLearner_screener_screen.glmnet___Lrnr_glm
+## [1] "Lrnr_cv"
+## [1] "Lrnr_pkg_SuperLearner_SL.glmnet"
+## [1] "Lrnr_glm"
+## [1] "Lrnr_pkg_SuperLearner_screener_screen.glmnet"
+## [1] "Lrnr_glm"
+## 
+## $Lrnr_glm
+## [1] "Lrnr_glm"
+## 
+## Call:  glm(formula = Y ~ ., family = gaussian(), data = task$X, weights = task$weights)
+## 
+## Coefficients:
+##                                             (Intercept)  
+##                                                 0.04734  
+##                         Lrnr_pkg_SuperLearner_SL.glmnet  
+##                                                -0.38129  
+##                                                Lrnr_glm  
+##                                                 1.47361  
+## Lrnr_pkg_SuperLearner_screener_screen.glmnet___Lrnr_glm  
+##                                                -0.36070  
+## 
+## Degrees of Freedom: 1440 Total (i.e. Null);  1437 Residual
+## Null Deviance:	    2353 
+## Residual Deviance: 2302 	AIC: 4774
+```
+
+```
+## $learner_fits
+## $learner_fits$CV_Lrnr_pkg_SuperLearner_SL.glmnetxLrnr_glmxLrnr_pkg_SuperLearner_screener_screen.glmnet___Lrnr_glm
+## [1] "Lrnr_cv"
+## [1] "Lrnr_pkg_SuperLearner_SL.glmnet"
+## [1] "Lrnr_glm"
+## [1] "Lrnr_pkg_SuperLearner_screener_screen.glmnet"
+## [1] "Lrnr_glm"
+## 
+## $learner_fits$Lrnr_glm
+## [1] "Lrnr_glm"
+## 
+## Call:  glm(formula = Y ~ ., family = gaussian(), data = task$X, weights = task$weights)
+## 
+## Coefficients:
+##                                             (Intercept)  
+##                                                 0.04734  
+##                         Lrnr_pkg_SuperLearner_SL.glmnet  
+##                                                -0.38129  
+##                                                Lrnr_glm  
+##                                                 1.47361  
+## Lrnr_pkg_SuperLearner_screener_screen.glmnet___Lrnr_glm  
+##                                                -0.36070  
+## 
+## Degrees of Freedom: 1440 Total (i.e. Null);  1437 Residual
+## Null Deviance:	    2353 
+## Residual Deviance: 2302 	AIC: 4774
+```
+
+???
+
+- ...
+
+- ...
+
+---
+
+# ...
+
+
+
+???
+
+- ...
+
+- ...
+
+---
+class: center, middle
+
+# Thanks!
+
+We have a great team: Jeremy Coyle, Nima Hejazi, Ivana Malenica, Oleg Sofrygin.
+
+Slides created via the R package
+[**xaringan**](https://github.com/yihui/xaringan).
+
+Powered by [remark.js](https://remarkjs.com),
+[**knitr**](http://yihui.name/knitr), and
+[R Markdown](https://rmarkdown.rstudio.com).
+    </textarea>
+<script src="libs/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "zenburn",
+"highlightLines": true
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {window.dispatchEvent(new Event('resize'));});
+(function() {var d = document, s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler"); if (!r) return; s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }"; d.head.appendChild(s);})();</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Config({
+  tex2jax: {
+    skipTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+  }
+});
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://cdn.bootcss.com/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
