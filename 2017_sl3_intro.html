@@ -14,7 +14,7 @@ class: center, middle, inverse, title-slide
 # The <code>sl3</code> R Package
 ## A fresh approach to Super Learning
 ### <a href="">Jeremy Coyle</a> &amp; <a href="http://nimahejazi.org">Nima Hejazi</a>
-### 2017-08-13 15:19:54
+### 2017-08-13 23:52:24
 
 ---
 
@@ -25,12 +25,18 @@ class: center, middle, inverse, title-slide
 
 --
 
-### View online:
-[goo.gl/HZzosu](https://goo.gl/HZzosu)
+### View them online:
+
+* [stat.berkeley.edu/~nhejazi/present/2017_sl3_intro/2017_sl3_intro.html](https://www.stat.berkeley.edu/~nhejazi/present/2017_sl3_intro/2017_sl3_intro.html)
+
+* here's a shortened URL: [https://goo.gl/bqP2tD](https://goo.gl/bqP2tD)
 
 --
 
-### Via git:
+### View them locally:
+
+_You'll need to clone the project branch containing the source materials for
+this talk from GitHub. This includes the finalized slide deck (in HTML)._
 
 
 ```bash
@@ -44,70 +50,57 @@ modern implementation of the Super Learner algorithm [@vdl2007super], a method
 for performing stacked regressions [@breiman1996stacked] and combining this with
 covariate screening and cross-validation.
 
-- In particular, we will look at the benefits that an object-oriented design
-(using the R6 framework) has on...
-
 ---
 class: inverse, center, middle
 
-# `sl3`: Core Design
+# `sl3`: The Core Design
 
 ---
 
-# R6, R6, ...
+# `sl3` Architecture
 
-## Why?
-
---
-
-- ...
-
---
-
-- ...
-
---
-
-- ...
-
-???
-
-- talk 1
-
-- talk 2
-
----
-
-# Core `sl3` Architecture
+All of the classes defined in `sl3` are based on the R6 framework, which brings
+an object-oriented paradigm to the R language.
 
 ## Core classes
 
-- `lrnr_base`
+- `task` - an object containing the data set of interest and specifying
+important features of the data (e.g., repeated measures).
 
 --
 
-- `Pipeline`
+- `lrnr_base` - a base class that serves as the foundation for other classes
+defined within `sl3`.
 
 --
 
-- `Stack`
+- `Pipeline` - a learner-type object created by chaining together screening and
+learning algorithms, allowing for covariate screening and model fitting to be
+subjected to the same cross-validation process.
+
+--
+
+- `Stack` - a stacked regression model -- that is, a learner-type object created
+by combining different (independent) learners or pipelines.
 
 ???
 
-- talk 1
-
-- talk 2
+- Probably good to point out that cross-validating a `Stack` allows for an
+included `Pipeline` to be subjected to CV in the same way as other learners
+(seriously awesome feature).
 
 ---
 class: inverse, center, middle
 
-# Using `sl3`
+# `sl3` in Action
 
 ## There ain't nothin' like a test drive...
 
 ---
 
 # Get the package
+
+- Currently, installation from the `master` branch is the only option:
 
 
 ```r
@@ -118,14 +111,35 @@ if (!("sl3" %in% installed.packages())) {
 
 
 
----
+--
 
-# Set up Data
+- Work is underway to set up a [`drat`
+archive](http://dirk.eddelbuettel.com/code/drat.html) to host all stable
+versions of the package.
+
+--
+
+- Of course, the package will eventually be available on CRAN, though a
+submission to this repository is still far down the road.
+
+--
+
+To start using `sl3`, let's load the package:
 
 
 ```r
 library(sl3)
+```
 
+---
+
+# A "toy" data set
+
+We can't do any model fitting without data. We'll use the `cpp` data set,
+included with the package, for our experiment.
+
+
+```r
 # load example data set
 data(cpp)
 cpp &lt;- cpp %&gt;%
@@ -138,8 +152,6 @@ covars &lt;- c("apgar1", "apgar5", "parity", "gagebrth", "mage", "meducyrs",
 outcome &lt;- "haz"
 ```
 
---
-
 ???
 
 - A working implementation of a targeted learning approach to biomarker
@@ -149,7 +161,10 @@ discovery using moderated statistics.
 
 ---
 
-# Setting up a `task`
+# Setting up a `Task`
+
+Recall that a `Task` is the core structure that holds the data set and
+specifications to be respected in the estimation/modeling procedure.
 
 
 ```r
@@ -158,7 +173,7 @@ task &lt;- sl3_Task$new(cpp, covariates = covars, outcome = outcome)
 
 --
 
-Data is in the nodes...
+Data is in the nodes:
 
 
 ```r
@@ -186,106 +201,70 @@ task$nodes
 
 ---
 
-# Screeners, learners, and pipelines
+# Screeners, learners, pipelines
+
+Both screeners and learners can be easily instantiated by calling their `new`
+methods:
 
 
 ```r
-# an elastic net screener, using the Super Learner package
-slscreener &lt;- Lrnr_pkg_SuperLearner_screener$new("screen.glmnet")
-
 # a GLM learning algorithm, comes built-in with sl3
 glm_learner &lt;- Lrnr_glm$new()
+```
 
+--
+
+We can even pull screening and learning algorithms directly from
+`Super Learner`:
+
+
+```r
+# an elastic net screener and learner, accessed via the Super Learner package
+slscreener &lt;- Lrnr_pkg_SuperLearner_screener$new("screen.glmnet")
+SL.glmnet_learner &lt;- Lrnr_pkg_SuperLearner$new(SL_wrapper = "SL.glmnet")
+```
+
+--
+
+And pipelines can be easily created by stringing screeners and learners
+together:
+
+
+```r
 # put them together in a pipeline
 screen_and_glm &lt;- Pipeline$new(slscreener, glm_learner)
 ```
 
----
+--
+
+Training a learners (or pipelines) is as easy as calling the `train` method:
 
 
 ```r
+# train the pipeline on the data in the task object
 sg_fit &lt;- screen_and_glm$train(task)
-print(sg_fit)
-```
-
-```
-## $Lrnr_pkg_SuperLearner_screener_screen.glmnet
-## [1] "Lrnr_pkg_SuperLearner_screener_screen.glmnet"
-## $selected
-## [1] "apgar1"   "parity"   "gagebrth" "mage"     "meducyrs" "sexn"    
-## 
-## 
-## $Lrnr_glm
-## [1] "Lrnr_glm"
-## 
-## Call:  glm(formula = Y ~ ., family = gaussian(), data = task$X, weights = task$weights)
-## 
-## Coefficients:
-##                                           (Intercept)  
-##                                             -5.540529  
-##   Lrnr_pkg_SuperLearner_screener_screen.glmnet_apgar1  
-##                                              0.013162  
-##   Lrnr_pkg_SuperLearner_screener_screen.glmnet_parity  
-##                                             -0.081139  
-## Lrnr_pkg_SuperLearner_screener_screen.glmnet_gagebrth  
-##                                              0.019678  
-##     Lrnr_pkg_SuperLearner_screener_screen.glmnet_mage  
-##                                              0.017596  
-## Lrnr_pkg_SuperLearner_screener_screen.glmnet_meducyrs  
-##                                             -0.004884  
-##     Lrnr_pkg_SuperLearner_screener_screen.glmnet_sexn  
-##                                             -0.079807  
-## 
-## Degrees of Freedom: 1440 Total (i.e. Null);  1434 Residual
-## Null Deviance:	    2353 
-## Residual Deviance: 2280 	AIC: 4766
-```
-
-```
-## $learner_fits
-## $learner_fits$Lrnr_pkg_SuperLearner_screener_screen.glmnet
-## [1] "Lrnr_pkg_SuperLearner_screener_screen.glmnet"
-## $selected
-## [1] "apgar1"   "parity"   "gagebrth" "mage"     "meducyrs" "sexn"    
-## 
-## 
-## $learner_fits$Lrnr_glm
-## [1] "Lrnr_glm"
-## 
-## Call:  glm(formula = Y ~ ., family = gaussian(), data = task$X, weights = task$weights)
-## 
-## Coefficients:
-##                                           (Intercept)  
-##                                             -5.540529  
-##   Lrnr_pkg_SuperLearner_screener_screen.glmnet_apgar1  
-##                                              0.013162  
-##   Lrnr_pkg_SuperLearner_screener_screen.glmnet_parity  
-##                                             -0.081139  
-## Lrnr_pkg_SuperLearner_screener_screen.glmnet_gagebrth  
-##                                              0.019678  
-##     Lrnr_pkg_SuperLearner_screener_screen.glmnet_mage  
-##                                              0.017596  
-## Lrnr_pkg_SuperLearner_screener_screen.glmnet_meducyrs  
-##                                             -0.004884  
-##     Lrnr_pkg_SuperLearner_screener_screen.glmnet_sexn  
-##                                             -0.079807  
-## 
-## Degrees of Freedom: 1440 Total (i.e. Null);  1434 Residual
-## Null Deviance:	    2353 
-## Residual Deviance: 2280 	AIC: 4766
 ```
 
 ---
 
+# Stacks
+
+We can create stacked regression models (Super Learners) by instantiating a new
+stack with several existing learners. (Note that we can even incldue pipelines
+in the model stack).
+
 
 ```r
-SL.glmnet_learner &lt;- Lrnr_pkg_SuperLearner$new(SL_wrapper = "SL.glmnet")
-
+# stacking learners/pipelines is essentially trivial
 learner_stack &lt;- Stack$new(SL.glmnet_learner, glm_learner, screen_and_glm)
+
+# train the stacked regression model via its built-in train method
 stack_fit &lt;- learner_stack$train(task)
 ```
 
----
+--
+
+Let's take a look at the predictions made by the stacked model:
 
 
 ```r
@@ -314,11 +293,19 @@ head(preds)
 
 - ...
 
-- ...
-
 ---
 
-# Cross-validation
+# But What About Cross-Validation?
+
+Almost forgot! CV is necessary in order to honestly evaluate our models and
+avoid overfitting. Thus, we need to be able to easily cross-validate the whole
+process. We provide facilities for easily doing this, based on the [`origami`
+package](https://github.com/jeremyrcoyle/origami).
+
+--
+
+Cross-validating a stacked model is as easy as instantiating and training a new
+`Lrnr_cv`. Let's do this with the stacked model we created before
 
 
 ```r
@@ -328,87 +315,48 @@ cv_fit &lt;- cv_stack$train(task)
 
 ---
 
+# Putting it all together: Super Learning
+
+We can build a Super Learner model by combining a cross-validated stacked model
+with a meta-learning algorithm.
+
+Let's do this with the cross-validated stack we just created, using a GLM as our
+meta-learner:
+
 
 ```r
 glm_stack &lt;- Pipeline$new(cv_stack, glm_learner)
+```
+
+--
+
+Just as in the cases we've already seen, training the Super Learner is an
+essentially trivial process:
+
+
+```r
 ml_fit &lt;- glm_stack$train(task)
-print(ml_fit)
+```
+
+--
+
+What do the predictions from our new Super Learner look like?
+
+
+```r
+preds_sl &lt;- ml_fit$predict()
+head(preds_sl)
 ```
 
 ```
-## $CV_Lrnr_pkg_SuperLearner_SL.glmnetxLrnr_glmxLrnr_pkg_SuperLearner_screener_screen.glmnet___Lrnr_glm
-## [1] "Lrnr_cv"
-## [1] "Lrnr_pkg_SuperLearner_SL.glmnet"
-## [1] "Lrnr_glm"
-## [1] "Lrnr_pkg_SuperLearner_screener_screen.glmnet"
-## [1] "Lrnr_glm"
-## 
-## $Lrnr_glm
-## [1] "Lrnr_glm"
-## 
-## Call:  glm(formula = Y ~ ., family = gaussian(), data = task$X, weights = task$weights)
-## 
-## Coefficients:
-##                                             (Intercept)  
-##                                                 0.04734  
-##                         Lrnr_pkg_SuperLearner_SL.glmnet  
-##                                                -0.38129  
-##                                                Lrnr_glm  
-##                                                 1.47361  
-## Lrnr_pkg_SuperLearner_screener_screen.glmnet___Lrnr_glm  
-##                                                -0.36070  
-## 
-## Degrees of Freedom: 1440 Total (i.e. Null);  1437 Residual
-## Null Deviance:	    2353 
-## Residual Deviance: 2302 	AIC: 4774
-```
-
-```
-## $learner_fits
-## $learner_fits$CV_Lrnr_pkg_SuperLearner_SL.glmnetxLrnr_glmxLrnr_pkg_SuperLearner_screener_screen.glmnet___Lrnr_glm
-## [1] "Lrnr_cv"
-## [1] "Lrnr_pkg_SuperLearner_SL.glmnet"
-## [1] "Lrnr_glm"
-## [1] "Lrnr_pkg_SuperLearner_screener_screen.glmnet"
-## [1] "Lrnr_glm"
-## 
-## $learner_fits$Lrnr_glm
-## [1] "Lrnr_glm"
-## 
-## Call:  glm(formula = Y ~ ., family = gaussian(), data = task$X, weights = task$weights)
-## 
-## Coefficients:
-##                                             (Intercept)  
-##                                                 0.04734  
-##                         Lrnr_pkg_SuperLearner_SL.glmnet  
-##                                                -0.38129  
-##                                                Lrnr_glm  
-##                                                 1.47361  
-## Lrnr_pkg_SuperLearner_screener_screen.glmnet___Lrnr_glm  
-##                                                -0.36070  
-## 
-## Degrees of Freedom: 1440 Total (i.e. Null);  1437 Residual
-## Null Deviance:	    2353 
-## Residual Deviance: 2302 	AIC: 4774
+##         1         2         3         4         5         6 
+## 0.3129252 0.3078742 0.2756114 0.2715259 0.2756114 0.1358479
 ```
 
 ???
 
-- ...
-
-- ...
-
----
-
-# ...
-
-
-
-???
-
-- ...
-
-- ...
+- Worth mentioning that the flexibility offered by our design allows us to
+invoke the Super Learner algorithm, but we can also do a lot more...
 
 ---
 class: center, middle

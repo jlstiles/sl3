@@ -23,12 +23,18 @@ showtext::showtext.opts(dpi = 300)
 
 --
 
-### View online:
-[goo.gl/HZzosu](https://goo.gl/HZzosu)
+### View them online:
+
+* [stat.berkeley.edu/~nhejazi/present/2017_sl3_intro/2017_sl3_intro.html](https://www.stat.berkeley.edu/~nhejazi/present/2017_sl3_intro/2017_sl3_intro.html)
+
+* here's a shortened URL: [https://goo.gl/bqP2tD](https://goo.gl/bqP2tD)
 
 --
 
-### Via git:
+### View them locally:
+
+_You'll need to clone the project branch containing the source materials for
+this talk from GitHub. This includes the finalized slide deck (in HTML)._
 
 ```{bash, eval=FALSE}
 git clone -b talk https://github.com/jeremyrcoyle/sl3.git
@@ -41,70 +47,57 @@ modern implementation of the Super Learner algorithm [@vdl2007super], a method
 for performing stacked regressions [@breiman1996stacked] and combining this with
 covariate screening and cross-validation.
 
-- In particular, we will look at the benefits that an object-oriented design
-(using the R6 framework) has on...
-
 ---
 class: inverse, center, middle
 
-# `sl3`: Core Design
+# `sl3`: The Core Design
 
 ---
 
-# R6, R6, ...
+# `sl3` Architecture
 
-## Why?
-
---
-
-- ...
-
---
-
-- ...
-
---
-
-- ...
-
-???
-
-- talk 1
-
-- talk 2
-
----
-
-# Core `sl3` Architecture
+All of the classes defined in `sl3` are based on the R6 framework, which brings
+an object-oriented paradigm to the R language.
 
 ## Core classes
 
-- `lrnr_base`
+- `task` - an object containing the data set of interest and specifying
+important features of the data (e.g., repeated measures).
 
 --
 
-- `Pipeline`
+- `lrnr_base` - a base class that serves as the foundation for other classes
+defined within `sl3`.
 
 --
 
-- `Stack`
+- `Pipeline` - a learner-type object created by chaining together screening and
+learning algorithms, allowing for covariate screening and model fitting to be
+subjected to the same cross-validation process.
+
+--
+
+- `Stack` - a stacked regression model -- that is, a learner-type object created
+by combining different (independent) learners or pipelines.
 
 ???
 
-- talk 1
-
-- talk 2
+- Probably good to point out that cross-validating a `Stack` allows for an
+included `Pipeline` to be subjected to CV in the same way as other learners
+(seriously awesome feature).
 
 ---
 class: inverse, center, middle
 
-# Using `sl3`
+# `sl3` in Action
 
 ## There ain't nothin' like a test drive...
 
 ---
 
 # Get the package
+
+- Currently, installation from the `master` branch is the only option:
 
 ```{r install_pkg, message=FALSE, eval=FALSE}
 if (!("sl3" %in% installed.packages())) {
@@ -121,13 +114,33 @@ library(SuperLearner)
 library(sl3)
 ```
 
+--
+
+- Work is underway to set up a [`drat`
+archive](http://dirk.eddelbuettel.com/code/drat.html) to host all stable
+versions of the package.
+
+--
+
+- Of course, the package will eventually be available on CRAN, though a
+submission to this repository is still far down the road.
+
+--
+
+To start using `sl3`, let's load the package:
+
+```{r prelims-pkg, message=FALSE}
+library(sl3)
+```
+
 ---
 
-# Set up Data
+# A "toy" data set
+
+We can't do any model fitting without data. We'll use the `cpp` data set,
+included with the package, for our experiment.
 
 ```{r prelims-data, message=FALSE}
-library(sl3)
-
 # load example data set
 data(cpp)
 cpp <- cpp %>%
@@ -140,8 +153,6 @@ covars <- c("apgar1", "apgar5", "parity", "gagebrth", "mage", "meducyrs",
 outcome <- "haz"
 ```
 
---
-
 ???
 
 - A working implementation of a targeted learning approach to biomarker
@@ -151,7 +162,10 @@ discovery using moderated statistics.
 
 ---
 
-# Setting up a `task`
+# Setting up a `Task`
+
+Recall that a `Task` is the core structure that holds the data set and
+specifications to be respected in the estimation/modeling procedure.
 
 ```{r sl3-task-setup, message=FALSE}
 task <- sl3_Task$new(cpp, covariates = covars, outcome = outcome)
@@ -159,7 +173,7 @@ task <- sl3_Task$new(cpp, covariates = covars, outcome = outcome)
 
 --
 
-Data is in the nodes...
+Data is in the nodes:
 
 ```{r sl3-task-nodes, message=FALSE}
 task$nodes
@@ -171,38 +185,67 @@ task$nodes
 
 ---
 
-# Screeners, learners, and pipelines
+# Screeners, learners, pipelines
+
+Both screeners and learners can be easily instantiated by calling their `new`
+methods:
 
 ```{r sl3-core-1, message=FALSE}
-# an elastic net screener, using the Super Learner package
-slscreener <- Lrnr_pkg_SuperLearner_screener$new("screen.glmnet")
-
 # a GLM learning algorithm, comes built-in with sl3
 glm_learner <- Lrnr_glm$new()
+```
 
+--
+
+We can even pull screening and learning algorithms directly from
+`Super Learner`:
+
+```{r sl3-core-2, message=FALSE}
+# an elastic net screener and learner, accessed via the Super Learner package
+slscreener <- Lrnr_pkg_SuperLearner_screener$new("screen.glmnet")
+SL.glmnet_learner <- Lrnr_pkg_SuperLearner$new(SL_wrapper = "SL.glmnet")
+```
+
+--
+
+And pipelines can be easily created by stringing screeners and learners
+together:
+
+```{r sl3-core-3, message=FALSE}
 # put them together in a pipeline
 screen_and_glm <- Pipeline$new(slscreener, glm_learner)
 ```
 
----
+--
 
-```{r, message=FALSE}
+Training a learners (or pipelines) is as easy as calling the `train` method:
+
+```{r sl3-core-4, message=FALSE}
+# train the pipeline on the data in the task object
 sg_fit <- screen_and_glm$train(task)
-print(sg_fit)
 ```
 
 ---
 
-```{r, message=FALSE}
-SL.glmnet_learner <- Lrnr_pkg_SuperLearner$new(SL_wrapper = "SL.glmnet")
+# Stacks
 
+We can create stacked regression models (Super Learners) by instantiating a new
+stack with several existing learners. (Note that we can even incldue pipelines
+in the model stack).
+
+```{r sl3-stacks-1, message=FALSE}
+# stacking learners/pipelines is essentially trivial
 learner_stack <- Stack$new(SL.glmnet_learner, glm_learner, screen_and_glm)
+
+# train the stacked regression model via its built-in train method
 stack_fit <- learner_stack$train(task)
 ```
 
----
+--
 
-```{r, message=FALSE}
+Let's take a look at the predictions made by the stacked model:
+
+```{r sl3-stacks-2, message=FALSE}
 preds <- stack_fit$predict()
 head(preds)
 ```
@@ -211,44 +254,61 @@ head(preds)
 
 - ...
 
-- ...
-
 ---
 
-# Cross-validation
+# But What About Cross-Validation?
 
-```{r, message=FALSE}
+Almost forgot! CV is necessary in order to honestly evaluate our models and
+avoid overfitting. Thus, we need to be able to easily cross-validate the whole
+process. We provide facilities for easily doing this, based on the [`origami`
+package](https://github.com/jeremyrcoyle/origami).
+
+--
+
+Cross-validating a stacked model is as easy as instantiating and training a new
+`Lrnr_cv`. Let's do this with the stacked model we created before
+
+```{r sl3-cv-1, message=FALSE}
 cv_stack <- Lrnr_cv$new(learner_stack)
 cv_fit <- cv_stack$train(task)
 ```
 
 ---
 
-```{r, message=FALSE}
+# Putting it all together: Super Learning
+
+We can build a Super Learner model by combining a cross-validated stacked model
+with a meta-learning algorithm.
+
+Let's do this with the cross-validated stack we just created, using a GLM as our
+meta-learner:
+
+```{r sl3-cv-sl-1, message=FALSE}
 glm_stack <- Pipeline$new(cv_stack, glm_learner)
+```
+
+--
+
+Just as in the cases we've already seen, training the Super Learner is an
+essentially trivial process:
+
+```{r sl3-cv-sl-2, message=FALSE}
 ml_fit <- glm_stack$train(task)
-print(ml_fit)
+```
+
+--
+
+What do the predictions from our new Super Learner look like?
+
+```{r sl3-cv-sl-3, message=FALSE}
+preds_sl <- ml_fit$predict()
+head(preds_sl)
 ```
 
 ???
 
-- ...
-
-- ...
-
----
-
-# ...
-
-```{r, message=FALSE}
-
-```
-
-???
-
-- ...
-
-- ...
+- Worth mentioning that the flexibility offered by our design allows us to
+invoke the Super Learner algorithm, but we can also do a lot more...
 
 ---
 class: center, middle
