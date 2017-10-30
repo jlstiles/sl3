@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>The sl3 R Package</title>
+    <meta charset="utf-8">
+    <meta name="author" content="Jeremy Coyle, Nima Hejazi, Ivana Malenica, Oleg Sofrygin" />
+    <link href="libs/remark-css-0.0.1/example.css" rel="stylesheet" />
+    <script src="libs/htmlwidgets-0.9/htmlwidgets.js"></script>
+    <link href="libs/vis-4.20.0/vis.css" rel="stylesheet" />
+    <script src="libs/vis-4.20.0/vis.min.js"></script>
+    <script src="libs/visNetwork-binding-2.0.1/visNetwork.js"></script>
+    <link rel="stylesheet" href="custom.css" type="text/css" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# The <code>sl3</code> R Package
+## Modern Super Learning with Pipelines
+### <a href="https://github.com/jeremyrcoyle">Jeremy Coyle</a>, <a href="https://nimahejazi.org">Nima Hejazi</a>, <a href="https://github.com/podTockom">Ivana Malenica</a>, <a href="https://github.com/osofr">Oleg Sofrygin</a>
+### 2017-10-30 10:57:21
+
+---
+
+
+
+
+# Accessing these slides
+
+--
+
+### View them online:
+
+* [https://www.stat.berkeley.edu/~nhejazi/present/2017_sl3_intro/deck.html](https://www.stat.berkeley.edu/~nhejazi/present/2017_sl3_intro/deck.html)
+
+* here's a shortened URL: [https://goo.gl/bqP2tD](https://goo.gl/bqP2tD)
+
+--
+
+### View them locally:
+
+_You'll need to clone the project branch containing the source materials for
+this talk from GitHub. This includes the finalized slide deck (in HTML)._
+
+
+```bash
+git clone -b talk https://github.com/jeremyrcoyle/sl3.git
+```
+
+???
+
+- This talk will focus on introducing the new `sl3` R package, which provides a
+modern implementation of the Super Learner algorithm [@vdl2007super], a method
+for performing stacked regressions [@breiman1996stacked], combined with
+covariate screening and cross-validation.
+
+---
+class: inverse, center, middle
+
+# Core `sl3` Design Principles
+
+---
+
+# `sl3` Architecture
+
+All of the classes defined in `sl3` are based on the R6 framework, which brings
+a newer object-oriented paradigm to the R language.
+
+## Core classes
+
+- `sl3_Task`, for defining a machine learning problem. These objects keep track
+  of the task data, as well as what variables play what roles in the machine
+  learning problem. These are easily created by `make_sl3_Task`.
+
+--
+
+- `Lrnr_base`, a base class for defining machine learning algorithms, as well as
+  _fits_ for those algorithms to particular `sl3_Task`s. Different learning
+  algorithms are defined in classes that inherit from this base class.
+
+--
+
+- `Pipeline`, a set of learners to be fit _sequentially_, where the fit from one
+  learner is used to define the task for the next learner. These are a special
+  kind of learner derived from `Lrnr_base`.
+
+--
+
+- `Stack`, like `Pipelines`, except in that learners are trained
+  _simultaneously_, so that their predictions can be either combined or
+  compared. These are a special kind of learner derived from `Lrnr_base`.
+
+???
+
+- Probably good to point out that cross-validating a `Stack` allows for an
+  included `Pipeline` to be subjected to CV in the same way as other learners
+  (seriously awesome feature).
+- Might be worth mentioning the basic differences between core OOP concepts, for
+  example classes, objects, methods, fields, inheritance, etc.
+- Because all learners inherit from `Lrnr_base`, they have many features in
+  common, and can be used interchangeably.
+- All learners define three main methods: `train`, `predict`, and `chain`.
+- `Pipeline` allows for covariate screening and model fitting to be subjected to
+  the same cross-validation process, necessary for Super Learning.
+
+---
+
+# Object Oriented Programming (OOP)
+
+- The key concept of OOP is that of an object, a collection of data and
+  functions that corresponds to some conceptual unit. Objects have two main
+  types of elements: _fields_ and _methods_.
+  
+--
+
+- _fields_ are information about an object.
+- _methods_ are actions an object can perform.
+
+--
+
+- Objects are members of _classes_, which define what those specific fields and
+  methods are. Classes can inherit elements from other classes.
+  
+--
+
+- `sl3` is designed using basic OOP principles and the R6 OOP framework, in
+  which methods and fields of a class object are accessed using the `$`
+  operator.
+
+---
+class: inverse, center, middle
+
+# `sl3` in Action
+
+## ain't nothin' like a test drive...
+
+---
+
+# Get the package
+
+- Currently, installation from the `master` branch is the only option:
+
+
+```r
+if (!("sl3" %in% installed.packages())) {
+  devtools::install_github("jeremyrcoyle/sl3")
+}
+```
+
+
+
+--
+
+- Of course, the package will be available on CRAN. An initial release is
+  forthcoming.
+
+--
+
+To start using `sl3`, let's load the package:
+
+
+```r
+library(sl3)
+```
+
+---
+
+# A "toy" data set
+
+We can't do any model fitting without data. We use data from the Collaborative
+Perinatal Project (CPP) to illustrate the features of `sl3` as well as its
+proper usage. For convenience, the data is included with the `sl3` R package.
+
+
+```r
+# load example data set
+data(cpp_imputed)
+
+# here are the covariates we are interested in and, of course, the outcome
+covars &lt;- c("apgar1", "apgar5", "parity", "gagebrth", "mage", "meducyrs",
+            "sexn")
+outcome &lt;- "haz"
+```
+
+???
+
+- Next, we'll walk through analyzing some data.
+
+---
+
+# Setting up `sl3_Task`s I
+
+Recall that a `sl3_Task` is the core structure that holds the data set and
+specifications to be respected in the estimation/modeling procedure.
+
+
+```r
+task &lt;- make_sl3_Task(data = cpp_imputed, covariates = covars,
+                      outcome = outcome)
+```
+
+--
+
+- We use the `make_sl3_Task` method to create a new `sl3_Task`, called `task`.
+
+- Here, we specified the underlying data, `cpp_imputed`, and vectors indicating
+  which varaibles to use as covariates and outcomes.
+
+--
+
+- `make_sl3_Task` supports a range of options in order to facilitate the proper
+  articulation of more advanced specifics potentially informative of the machine
+  learning problem.
+  
+- For example, we can specify the id, weights, and offset nodes listed
+  previously.
+
+---
+
+# Setting up `sl3_Task`s II
+
+Let's take a look at the `task` that we set up:
+
+
+```r
+task
+```
+
+```
+## A sl3 Task with 1441 observations and the following nodes:
+## $covariates
+## [1] "apgar1"   "apgar5"   "parity"   "gagebrth" "mage"     "meducyrs"
+## [7] "sexn"    
+## 
+## $outcome
+## [1] "haz"
+## 
+## $id
+## NULL
+## 
+## $weights
+## NULL
+## 
+## $offset
+## NULL
+```
+
+---
+
+# Learners
+
+- `Lrnr_base` is the base class for defining machine learning algorithms, as
+  well as fits for those algorithms to particular `sl3_Tasks`.
+
+- Different machine learning algorithms are defined in classes that inherit from
+  `Lrnr_base` (e.g., the `Lrnr_glm` class inherits from `Lrnr_base`, and defines
+  a learner that fits generalized linear models).
+
+- We will use the term learners to refer to the family of classes that inherit
+  from `Lrnr_base`.
+  
+---
+
+Learner objects can be constructed from their class
+  definitions using the `make_learner` function:
+
+
+---
+
+# Screeners, learners, pipelines
+
+Both screeners and learners can be easily instantiated by calling their `new`
+methods:
+
+
+```r
+# a GLM learning algorithm, comes built-in with sl3
+glm_learner &lt;- Lrnr_glm$new()
+```
+
+--
+
+We can even pull screening and learning algorithms directly from
+`Super Learner`:
+
+
+```r
+# an elastic net screener and learner, accessed via the Super Learner package
+slscreener &lt;- Lrnr_pkg_SuperLearner_screener$new("screen.glmnet")
+SL.glmnet_learner &lt;- Lrnr_pkg_SuperLearner$new(SL_wrapper = "SL.glmnet")
+```
+
+--
+
+And pipelines can be easily created by stringing screeners and learners
+together:
+
+
+```r
+# put them together in a pipeline
+screen_and_glm &lt;- Pipeline$new(slscreener, glm_learner)
+```
+
+--
+
+Training a learners (or pipelines) is as easy as calling the `train` method:
+
+
+```r
+# train the pipeline on the data in the task object
+sg_fit &lt;- screen_and_glm$train(task)
+```
+
+---
+
+# Stacks
+
+We can create stacked regression models (Super Learners) by instantiating a new
+stack with several existing learners. (Note that we can even incldue pipelines
+in the model stack).
+
+
+```r
+# stacking learners/pipelines is essentially trivial
+learner_stack &lt;- Stack$new(SL.glmnet_learner, glm_learner, screen_and_glm)
+
+# train the stacked regression model via its built-in train method
+stack_fit &lt;- learner_stack$train(task)
+```
+
+--
+
+Let's take a look at the predictions made by the stacked model:
+
+
+```r
+preds &lt;- stack_fit$predict()
+head(preds)
+```
+
+```
+##    Lrnr_pkg_SuperLearner_SL.glmnet   Lrnr_glm
+## 1:                      0.35495384 0.36298498
+## 2:                      0.35495384 0.36298498
+## 3:                      0.24777855 0.25993072
+## 4:                      0.24777855 0.25993072
+## 5:                      0.24777855 0.25993072
+## 6:                      0.03402737 0.05680264
+##    Lrnr_pkg_SuperLearner_screener_screen.glmnet___Lrnr_glm
+## 1:                                              0.36228209
+## 2:                                              0.36228209
+## 3:                                              0.25870995
+## 4:                                              0.25870995
+## 5:                                              0.25870995
+## 6:                                              0.05600958
+```
+
+???
+
+- ...
+
+---
+
+# But What About Cross-Validation?
+
+Almost forgot! CV is necessary in order to honestly evaluate our models and
+avoid overfitting. Thus, we need to be able to easily cross-validate the whole
+process. We provide facilities for easily doing this, based on the [`origami`
+package](https://github.com/jeremyrcoyle/origami).
+
+--
+
+Cross-validating a stacked model is as easy as instantiating and training a new
+`Lrnr_cv`. Let's do this with the stacked model we created before
+
+
+```r
+cv_stack &lt;- Lrnr_cv$new(learner_stack)
+cv_fit &lt;- cv_stack$train(task)
+```
+
+---
+
+# Putting it all together: Super Learning
+
+We can build a Super Learner model by combining a cross-validated stacked model
+with a meta-learning algorithm.
+
+Let's do this with the cross-validated stack we just created, using a GLM as our
+meta-learner:
+
+
+```r
+glm_stack &lt;- Pipeline$new(cv_stack, glm_learner)
+```
+
+--
+
+Just as in the cases we've already seen, training the Super Learner is an
+essentially trivial process:
+
+
+```r
+ml_fit &lt;- glm_stack$train(task)
+```
+
+--
+
+What do the predictions from our new Super Learner look like?
+
+
+```r
+preds_sl &lt;- ml_fit$predict()
+head(preds_sl)
+```
+
+```
+## [1] 0.3236359 0.3036160 0.2096651 0.2918325 0.2560567 0.1206245
+```
+
+???
+
+- Worth mentioning that the flexibility offered by our design allows us to
+invoke the Super Learner algorithm, but we can also do a lot more...
+
+
+---
+class: inverse, center, middle
+
+# Extending the `sl3` package
+
+---
+class: inverse, center, middle
+
+# Computing with `delayed`
+
+---
+
+# ...
+
+
+```r
+metalearner &lt;- make_learner(Lrnr_nnls)
+lrnr_glm &lt;- make_learner(Lrnr_glm)
+lrnr_rf &lt;- make_learner(Lrnr_randomForest)
+lrnr_glmnet &lt;- make_learner(Lrnr_glmnet)
+sl &lt;- Lrnr_sl$new(learners = list(lrnr_glm, lrnr_rf, lrnr_glmnet),
+                  metalearner = metalearner)
+delayed_sl_fit &lt;- delayed_learner_train(sl, task)
+```
+
+---
+
+# ...
+
+
+```r
+plot(delayed_sl_fit)
+```
+
+<div id="htmlwidget-030a79144d1be78e6b22" style="width:100%;height:1350px;" class="visNetwork html-widget"></div>
+<script type="application/json" data-for="htmlwidget-030a79144d1be78e6b22">{"x":{"nodes":{"id":["ce869e2e-bd9b-11e7-a479-a8667f0792e4","ce8683ee-bd9b-11e7-a479-a8667f0792e4","ce8579d6-bd9b-11e7-a479-a8667f0792e4","ce855be0-bd9b-11e7-a479-a8667f0792e4","ce7c8920-bd9b-11e7-a479-a8667f0792e4","ce7b7c38-bd9b-11e7-a479-a8667f0792e4","ce7c5b80-bd9b-11e7-a479-a8667f0792e4","ce7bc30a-bd9b-11e7-a479-a8667f0792e4","ce7c0342-bd9b-11e7-a479-a8667f0792e4","ce7c2d7c-bd9b-11e7-a479-a8667f0792e4","ce7de126-bd9b-11e7-a479-a8667f0792e4","ce7cad4c-bd9b-11e7-a479-a8667f0792e4","ce7dbe12-bd9b-11e7-a479-a8667f0792e4","ce7d1d90-bd9b-11e7-a479-a8667f0792e4","ce7d6994-bd9b-11e7-a479-a8667f0792e4","ce7d9c48-bd9b-11e7-a479-a8667f0792e4","ce7f1d7a-bd9b-11e7-a479-a8667f0792e4","ce7e0728-bd9b-11e7-a479-a8667f0792e4","ce7efee4-bd9b-11e7-a479-a8667f0792e4","ce7e7622-bd9b-11e7-a479-a8667f0792e4","ce7eac8c-bd9b-11e7-a479-a8667f0792e4","ce7ed860-bd9b-11e7-a479-a8667f0792e4","ce7fbc08-bd9b-11e7-a479-a8667f0792e4","ce7f36a2-bd9b-11e7-a479-a8667f0792e4","ce7fa132-bd9b-11e7-a479-a8667f0792e4","ce7f50e2-bd9b-11e7-a479-a8667f0792e4","ce7f6bae-bd9b-11e7-a479-a8667f0792e4","ce7f8850-bd9b-11e7-a479-a8667f0792e4","ce81339e-bd9b-11e7-a479-a8667f0792e4","ce800352-bd9b-11e7-a479-a8667f0792e4","ce810e64-bd9b-11e7-a479-a8667f0792e4","ce805294-bd9b-11e7-a479-a8667f0792e4","ce80a38e-bd9b-11e7-a479-a8667f0792e4","ce80e1b4-bd9b-11e7-a479-a8667f0792e4","ce820684-bd9b-11e7-a479-a8667f0792e4","ce816382-bd9b-11e7-a479-a8667f0792e4","ce81ec4e-bd9b-11e7-a479-a8667f0792e4","ce818ace-bd9b-11e7-a479-a8667f0792e4","ce81ab62-bd9b-11e7-a479-a8667f0792e4","ce81cb2e-bd9b-11e7-a479-a8667f0792e4","ce830444-bd9b-11e7-a479-a8667f0792e4","ce822100-bd9b-11e7-a479-a8667f0792e4","ce82e8f6-bd9b-11e7-a479-a8667f0792e4","ce823d8e-bd9b-11e7-a479-a8667f0792e4","ce828ff0-bd9b-11e7-a479-a8667f0792e4","ce82c24a-bd9b-11e7-a479-a8667f0792e4","ce83ca0a-bd9b-11e7-a479-a8667f0792e4","ce831e98-bd9b-11e7-a479-a8667f0792e4","ce83af2a-bd9b-11e7-a479-a8667f0792e4","ce834878-bd9b-11e7-a479-a8667f0792e4","ce836f4c-bd9b-11e7-a479-a8667f0792e4","ce8391e8-bd9b-11e7-a479-a8667f0792e4","ce8467e4-bd9b-11e7-a479-a8667f0792e4","ce83e562-bd9b-11e7-a479-a8667f0792e4","ce844dfe-bd9b-11e7-a479-a8667f0792e4","ce83ffc0-bd9b-11e7-a479-a8667f0792e4","ce841af0-bd9b-11e7-a479-a8667f0792e4","ce843562-bd9b-11e7-a479-a8667f0792e4","ce853ba6-bd9b-11e7-a479-a8667f0792e4","ce8480bc-bd9b-11e7-a479-a8667f0792e4","ce851900-bd9b-11e7-a479-a8667f0792e4","ce849a70-bd9b-11e7-a479-a8667f0792e4","ce84b500-bd9b-11e7-a479-a8667f0792e4","ce84d33c-bd9b-11e7-a479-a8667f0792e4","ce8594f2-bd9b-11e7-a479-a8667f0792e4","ce85bc84-bd9b-11e7-a479-a8667f0792e4","ce8669cc-bd9b-11e7-a479-a8667f0792e4","ce864e10-bd9b-11e7-a479-a8667f0792e4","ce86334e-bd9b-11e7-a479-a8667f0792e4","ce85db9c-bd9b-11e7-a479-a8667f0792e4","ce85f58c-bd9b-11e7-a479-a8667f0792e4","ce861986-bd9b-11e7-a479-a8667f0792e4"],"label":["CV_","bundle","CV_Stack","bundle","Stack","train_task(task = task, fold = fold)","bundle","Lrnr_glm","Lrnr_randomForest_100_TRUE_5_NULL_FALSE","Lrnr_glmnet_NULL_deviance_10_1_100","Stack","train_task(task = task, fold = fold)","bundle","Lrnr_glm","Lrnr_randomForest_100_TRUE_5_NULL_FALSE","Lrnr_glmnet_NULL_deviance_10_1_100","Stack","train_task(task = task, fold = fold)","bundle","Lrnr_glm","Lrnr_randomForest_100_TRUE_5_NULL_FALSE","Lrnr_glmnet_NULL_deviance_10_1_100","Stack","train_task(task = task, fold = fold)","bundle","Lrnr_glm","Lrnr_randomForest_100_TRUE_5_NULL_FALSE","Lrnr_glmnet_NULL_deviance_10_1_100","Stack","train_task(task = task, fold = fold)","bundle","Lrnr_glm","Lrnr_randomForest_100_TRUE_5_NULL_FALSE","Lrnr_glmnet_NULL_deviance_10_1_100","Stack","train_task(task = task, fold = fold)","bundle","Lrnr_glm","Lrnr_randomForest_100_TRUE_5_NULL_FALSE","Lrnr_glmnet_NULL_deviance_10_1_100","Stack","train_task(task = task, fold = fold)","bundle","Lrnr_glm","Lrnr_randomForest_100_TRUE_5_NULL_FALSE","Lrnr_glmnet_NULL_deviance_10_1_100","Stack","train_task(task = task, fold = fold)","bundle","Lrnr_glm","Lrnr_randomForest_100_TRUE_5_NULL_FALSE","Lrnr_glmnet_NULL_deviance_10_1_100","Stack","train_task(task = task, fold = fold)","bundle","Lrnr_glm","Lrnr_randomForest_100_TRUE_5_NULL_FALSE","Lrnr_glmnet_NULL_deviance_10_1_100","Stack","train_task(task = task, fold = fold)","bundle","Lrnr_glm","Lrnr_randomForest_100_TRUE_5_NULL_FALSE","Lrnr_glmnet_NULL_deviance_10_1_100","chain","Lrnr_nnls","make_learner(learner_class = learner_class, ..1, ..2)","Stack","bundle","Lrnr_glm","Lrnr_randomForest_100_TRUE_5_NULL_FALSE","Lrnr_glmnet_NULL_deviance_10_1_100"],"level":[1,2,6,7,8,11,9,10,10,10,8,11,9,10,10,10,8,11,9,10,10,10,8,11,9,10,10,10,8,11,9,10,10,10,8,11,9,10,10,10,8,11,9,10,10,10,8,11,9,10,10,10,8,11,9,10,10,10,8,11,9,10,10,10,5,4,3,4,5,6,6,6],"sequential":[true,true,true,true,true,true,true,false,false,false,true,true,true,false,false,false,true,true,true,false,false,false,true,true,true,false,false,false,true,true,true,false,false,false,true,true,true,false,false,false,true,true,true,false,false,false,true,true,true,false,false,false,true,true,true,false,false,false,true,true,true,false,false,false,true,false,true,true,true,false,false,false],"state":["waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","waiting","waiting","waiting","waiting","ready","ready","ready"],"group":["waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","ready","waiting","waiting","waiting","waiting","waiting","waiting","waiting","waiting","waiting","ready","ready","ready"],"shape":["square","square","square","square","square","square","square","dot","dot","dot","square","square","square","dot","dot","dot","square","square","square","dot","dot","dot","square","square","square","dot","dot","dot","square","square","square","dot","dot","dot","square","square","square","dot","dot","dot","square","square","square","dot","dot","dot","square","square","square","dot","dot","dot","square","square","square","dot","dot","dot","square","square","square","dot","dot","dot","square","dot","square","square","square","dot","dot","dot"]},"edges":{"from":["ce7b7c38-bd9b-11e7-a479-a8667f0792e4","ce7b7c38-bd9b-11e7-a479-a8667f0792e4","ce7bc30a-bd9b-11e7-a479-a8667f0792e4","ce7b7c38-bd9b-11e7-a479-a8667f0792e4","ce7c0342-bd9b-11e7-a479-a8667f0792e4","ce7b7c38-bd9b-11e7-a479-a8667f0792e4","ce7c2d7c-bd9b-11e7-a479-a8667f0792e4","ce7c5b80-bd9b-11e7-a479-a8667f0792e4","ce7c8920-bd9b-11e7-a479-a8667f0792e4","ce7cad4c-bd9b-11e7-a479-a8667f0792e4","ce7cad4c-bd9b-11e7-a479-a8667f0792e4","ce7d1d90-bd9b-11e7-a479-a8667f0792e4","ce7cad4c-bd9b-11e7-a479-a8667f0792e4","ce7d6994-bd9b-11e7-a479-a8667f0792e4","ce7cad4c-bd9b-11e7-a479-a8667f0792e4","ce7d9c48-bd9b-11e7-a479-a8667f0792e4","ce7dbe12-bd9b-11e7-a479-a8667f0792e4","ce7de126-bd9b-11e7-a479-a8667f0792e4","ce7e0728-bd9b-11e7-a479-a8667f0792e4","ce7e0728-bd9b-11e7-a479-a8667f0792e4","ce7e7622-bd9b-11e7-a479-a8667f0792e4","ce7e0728-bd9b-11e7-a479-a8667f0792e4","ce7eac8c-bd9b-11e7-a479-a8667f0792e4","ce7e0728-bd9b-11e7-a479-a8667f0792e4","ce7ed860-bd9b-11e7-a479-a8667f0792e4","ce7efee4-bd9b-11e7-a479-a8667f0792e4","ce7f1d7a-bd9b-11e7-a479-a8667f0792e4","ce7f36a2-bd9b-11e7-a479-a8667f0792e4","ce7f36a2-bd9b-11e7-a479-a8667f0792e4","ce7f50e2-bd9b-11e7-a479-a8667f0792e4","ce7f36a2-bd9b-11e7-a479-a8667f0792e4","ce7f6bae-bd9b-11e7-a479-a8667f0792e4","ce7f36a2-bd9b-11e7-a479-a8667f0792e4","ce7f8850-bd9b-11e7-a479-a8667f0792e4","ce7fa132-bd9b-11e7-a479-a8667f0792e4","ce7fbc08-bd9b-11e7-a479-a8667f0792e4","ce800352-bd9b-11e7-a479-a8667f0792e4","ce800352-bd9b-11e7-a479-a8667f0792e4","ce805294-bd9b-11e7-a479-a8667f0792e4","ce800352-bd9b-11e7-a479-a8667f0792e4","ce80a38e-bd9b-11e7-a479-a8667f0792e4","ce800352-bd9b-11e7-a479-a8667f0792e4","ce80e1b4-bd9b-11e7-a479-a8667f0792e4","ce810e64-bd9b-11e7-a479-a8667f0792e4","ce81339e-bd9b-11e7-a479-a8667f0792e4","ce816382-bd9b-11e7-a479-a8667f0792e4","ce816382-bd9b-11e7-a479-a8667f0792e4","ce818ace-bd9b-11e7-a479-a8667f0792e4","ce816382-bd9b-11e7-a479-a8667f0792e4","ce81ab62-bd9b-11e7-a479-a8667f0792e4","ce816382-bd9b-11e7-a479-a8667f0792e4","ce81cb2e-bd9b-11e7-a479-a8667f0792e4","ce81ec4e-bd9b-11e7-a479-a8667f0792e4","ce820684-bd9b-11e7-a479-a8667f0792e4","ce822100-bd9b-11e7-a479-a8667f0792e4","ce822100-bd9b-11e7-a479-a8667f0792e4","ce823d8e-bd9b-11e7-a479-a8667f0792e4","ce822100-bd9b-11e7-a479-a8667f0792e4","ce828ff0-bd9b-11e7-a479-a8667f0792e4","ce822100-bd9b-11e7-a479-a8667f0792e4","ce82c24a-bd9b-11e7-a479-a8667f0792e4","ce82e8f6-bd9b-11e7-a479-a8667f0792e4","ce830444-bd9b-11e7-a479-a8667f0792e4","ce831e98-bd9b-11e7-a479-a8667f0792e4","ce831e98-bd9b-11e7-a479-a8667f0792e4","ce834878-bd9b-11e7-a479-a8667f0792e4","ce831e98-bd9b-11e7-a479-a8667f0792e4","ce836f4c-bd9b-11e7-a479-a8667f0792e4","ce831e98-bd9b-11e7-a479-a8667f0792e4","ce8391e8-bd9b-11e7-a479-a8667f0792e4","ce83af2a-bd9b-11e7-a479-a8667f0792e4","ce83ca0a-bd9b-11e7-a479-a8667f0792e4","ce83e562-bd9b-11e7-a479-a8667f0792e4","ce83e562-bd9b-11e7-a479-a8667f0792e4","ce83ffc0-bd9b-11e7-a479-a8667f0792e4","ce83e562-bd9b-11e7-a479-a8667f0792e4","ce841af0-bd9b-11e7-a479-a8667f0792e4","ce83e562-bd9b-11e7-a479-a8667f0792e4","ce843562-bd9b-11e7-a479-a8667f0792e4","ce844dfe-bd9b-11e7-a479-a8667f0792e4","ce8467e4-bd9b-11e7-a479-a8667f0792e4","ce8480bc-bd9b-11e7-a479-a8667f0792e4","ce8480bc-bd9b-11e7-a479-a8667f0792e4","ce849a70-bd9b-11e7-a479-a8667f0792e4","ce8480bc-bd9b-11e7-a479-a8667f0792e4","ce84b500-bd9b-11e7-a479-a8667f0792e4","ce8480bc-bd9b-11e7-a479-a8667f0792e4","ce84d33c-bd9b-11e7-a479-a8667f0792e4","ce851900-bd9b-11e7-a479-a8667f0792e4","ce853ba6-bd9b-11e7-a479-a8667f0792e4","ce855be0-bd9b-11e7-a479-a8667f0792e4","ce8579d6-bd9b-11e7-a479-a8667f0792e4","ce8579d6-bd9b-11e7-a479-a8667f0792e4","ce8594f2-bd9b-11e7-a479-a8667f0792e4","ce8594f2-bd9b-11e7-a479-a8667f0792e4","ce85bc84-bd9b-11e7-a479-a8667f0792e4","ce85db9c-bd9b-11e7-a479-a8667f0792e4","ce85f58c-bd9b-11e7-a479-a8667f0792e4","ce861986-bd9b-11e7-a479-a8667f0792e4","ce86334e-bd9b-11e7-a479-a8667f0792e4","ce864e10-bd9b-11e7-a479-a8667f0792e4","ce85bc84-bd9b-11e7-a479-a8667f0792e4","ce8669cc-bd9b-11e7-a479-a8667f0792e4","ce8683ee-bd9b-11e7-a479-a8667f0792e4"],"to":["ce7c8920-bd9b-11e7-a479-a8667f0792e4","ce7bc30a-bd9b-11e7-a479-a8667f0792e4","ce7c5b80-bd9b-11e7-a479-a8667f0792e4","ce7c0342-bd9b-11e7-a479-a8667f0792e4","ce7c5b80-bd9b-11e7-a479-a8667f0792e4","ce7c2d7c-bd9b-11e7-a479-a8667f0792e4","ce7c5b80-bd9b-11e7-a479-a8667f0792e4","ce7c8920-bd9b-11e7-a479-a8667f0792e4","ce855be0-bd9b-11e7-a479-a8667f0792e4","ce7de126-bd9b-11e7-a479-a8667f0792e4","ce7d1d90-bd9b-11e7-a479-a8667f0792e4","ce7dbe12-bd9b-11e7-a479-a8667f0792e4","ce7d6994-bd9b-11e7-a479-a8667f0792e4","ce7dbe12-bd9b-11e7-a479-a8667f0792e4","ce7d9c48-bd9b-11e7-a479-a8667f0792e4","ce7dbe12-bd9b-11e7-a479-a8667f0792e4","ce7de126-bd9b-11e7-a479-a8667f0792e4","ce855be0-bd9b-11e7-a479-a8667f0792e4","ce7f1d7a-bd9b-11e7-a479-a8667f0792e4","ce7e7622-bd9b-11e7-a479-a8667f0792e4","ce7efee4-bd9b-11e7-a479-a8667f0792e4","ce7eac8c-bd9b-11e7-a479-a8667f0792e4","ce7efee4-bd9b-11e7-a479-a8667f0792e4","ce7ed860-bd9b-11e7-a479-a8667f0792e4","ce7efee4-bd9b-11e7-a479-a8667f0792e4","ce7f1d7a-bd9b-11e7-a479-a8667f0792e4","ce855be0-bd9b-11e7-a479-a8667f0792e4","ce7fbc08-bd9b-11e7-a479-a8667f0792e4","ce7f50e2-bd9b-11e7-a479-a8667f0792e4","ce7fa132-bd9b-11e7-a479-a8667f0792e4","ce7f6bae-bd9b-11e7-a479-a8667f0792e4","ce7fa132-bd9b-11e7-a479-a8667f0792e4","ce7f8850-bd9b-11e7-a479-a8667f0792e4","ce7fa132-bd9b-11e7-a479-a8667f0792e4","ce7fbc08-bd9b-11e7-a479-a8667f0792e4","ce855be0-bd9b-11e7-a479-a8667f0792e4","ce81339e-bd9b-11e7-a479-a8667f0792e4","ce805294-bd9b-11e7-a479-a8667f0792e4","ce810e64-bd9b-11e7-a479-a8667f0792e4","ce80a38e-bd9b-11e7-a479-a8667f0792e4","ce810e64-bd9b-11e7-a479-a8667f0792e4","ce80e1b4-bd9b-11e7-a479-a8667f0792e4","ce810e64-bd9b-11e7-a479-a8667f0792e4","ce81339e-bd9b-11e7-a479-a8667f0792e4","ce855be0-bd9b-11e7-a479-a8667f0792e4","ce820684-bd9b-11e7-a479-a8667f0792e4","ce818ace-bd9b-11e7-a479-a8667f0792e4","ce81ec4e-bd9b-11e7-a479-a8667f0792e4","ce81ab62-bd9b-11e7-a479-a8667f0792e4","ce81ec4e-bd9b-11e7-a479-a8667f0792e4","ce81cb2e-bd9b-11e7-a479-a8667f0792e4","ce81ec4e-bd9b-11e7-a479-a8667f0792e4","ce820684-bd9b-11e7-a479-a8667f0792e4","ce855be0-bd9b-11e7-a479-a8667f0792e4","ce830444-bd9b-11e7-a479-a8667f0792e4","ce823d8e-bd9b-11e7-a479-a8667f0792e4","ce82e8f6-bd9b-11e7-a479-a8667f0792e4","ce828ff0-bd9b-11e7-a479-a8667f0792e4","ce82e8f6-bd9b-11e7-a479-a8667f0792e4","ce82c24a-bd9b-11e7-a479-a8667f0792e4","ce82e8f6-bd9b-11e7-a479-a8667f0792e4","ce830444-bd9b-11e7-a479-a8667f0792e4","ce855be0-bd9b-11e7-a479-a8667f0792e4","ce83ca0a-bd9b-11e7-a479-a8667f0792e4","ce834878-bd9b-11e7-a479-a8667f0792e4","ce83af2a-bd9b-11e7-a479-a8667f0792e4","ce836f4c-bd9b-11e7-a479-a8667f0792e4","ce83af2a-bd9b-11e7-a479-a8667f0792e4","ce8391e8-bd9b-11e7-a479-a8667f0792e4","ce83af2a-bd9b-11e7-a479-a8667f0792e4","ce83ca0a-bd9b-11e7-a479-a8667f0792e4","ce855be0-bd9b-11e7-a479-a8667f0792e4","ce8467e4-bd9b-11e7-a479-a8667f0792e4","ce83ffc0-bd9b-11e7-a479-a8667f0792e4","ce844dfe-bd9b-11e7-a479-a8667f0792e4","ce841af0-bd9b-11e7-a479-a8667f0792e4","ce844dfe-bd9b-11e7-a479-a8667f0792e4","ce843562-bd9b-11e7-a479-a8667f0792e4","ce844dfe-bd9b-11e7-a479-a8667f0792e4","ce8467e4-bd9b-11e7-a479-a8667f0792e4","ce855be0-bd9b-11e7-a479-a8667f0792e4","ce853ba6-bd9b-11e7-a479-a8667f0792e4","ce849a70-bd9b-11e7-a479-a8667f0792e4","ce851900-bd9b-11e7-a479-a8667f0792e4","ce84b500-bd9b-11e7-a479-a8667f0792e4","ce851900-bd9b-11e7-a479-a8667f0792e4","ce84d33c-bd9b-11e7-a479-a8667f0792e4","ce851900-bd9b-11e7-a479-a8667f0792e4","ce853ba6-bd9b-11e7-a479-a8667f0792e4","ce855be0-bd9b-11e7-a479-a8667f0792e4","ce8579d6-bd9b-11e7-a479-a8667f0792e4","ce8683ee-bd9b-11e7-a479-a8667f0792e4","ce8594f2-bd9b-11e7-a479-a8667f0792e4","ce8683ee-bd9b-11e7-a479-a8667f0792e4","ce85bc84-bd9b-11e7-a479-a8667f0792e4","ce8683ee-bd9b-11e7-a479-a8667f0792e4","ce86334e-bd9b-11e7-a479-a8667f0792e4","ce86334e-bd9b-11e7-a479-a8667f0792e4","ce86334e-bd9b-11e7-a479-a8667f0792e4","ce864e10-bd9b-11e7-a479-a8667f0792e4","ce8669cc-bd9b-11e7-a479-a8667f0792e4","ce8669cc-bd9b-11e7-a479-a8667f0792e4","ce8683ee-bd9b-11e7-a479-a8667f0792e4","ce869e2e-bd9b-11e7-a479-a8667f0792e4"],"label":["","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","",""]},"nodesToDataframe":true,"edgesToDataframe":true,"options":{"width":"100%","height":"100%","nodes":{"shape":"dot"},"manipulation":{"enabled":false},"edges":{"arrows":"to"},"layout":{"hierarchical":{"enabled":true,"levelSeparation":500,"direction":"RL"}},"groups":{"waiting":{"color":{"border":"black","background":"white"}},"ready":{"color":{"border":"black","background":"orange"}},"running":{"color":{"border":"black","background":"lightgreen"}},"resolved":{"color":{"border":"black","background":"black"}},"useDefaultGroups":true,"error":{"color":{"border":"black","background":"lightpink"}}}},"groups":["waiting","ready"],"width":"100%","height":null,"idselection":{"enabled":false},"byselection":{"enabled":false},"main":null,"submain":null,"footer":null,"legend":{"width":0.2,"useGroups":false,"position":"left","ncol":1,"stepX":100,"stepY":100,"nodes":{"label":["waiting","ready","running","resolved","error","sequential","parallel"],"color":[{"border":"black","background":"white"},{"border":"black","background":"orange"},{"border":"black","background":"lightgreen"},{"border":"black","background":"black"},{"border":"black","background":"lightpink"},{"border":"black","background":"white"},{"border":"black","background":"white"}],"shape":["dot","dot","dot","dot","dot","square","dot"]},"nodesToDataframe":true}},"evals":[],"jsHooks":[]}</script>
+
+---
+class: center, middle
+
+# Thanks!
+
+We have a great team: Jeremy Coyle, Nima Hejazi, Ivana Malenica, Oleg Sofrygin.
+
+Slides created via the R package
+[**xaringan**](https://github.com/yihui/xaringan).
+
+Powered by [remark.js](https://remarkjs.com),
+[**knitr**](http://yihui.name/knitr), and
+[R Markdown](https://rmarkdown.rstudio.com).
+    </textarea>
+<script src="libs/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "zenburn",
+"highlightLines": true
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {window.dispatchEvent(new Event('resize'));});
+(function() {var d = document, s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler"); if (!r) return; s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }"; d.head.appendChild(s);})();</script>
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Config({
+  tex2jax: {
+    skipTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+  }
+});
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://cdn.bootcss.com/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>

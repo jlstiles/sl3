@@ -1,7 +1,10 @@
 ---
 title: "The `sl3` R Package"
-subtitle: "A fresh approach to Super Learning"
-author: "[Jeremy Coyle]() & [Nima Hejazi](http://nimahejazi.org)"
+subtitle: "Modern Super Learning with Pipelines"
+author: "[Jeremy Coyle](https://github.com/jeremyrcoyle), [Nima
+  Hejazi](https://nimahejazi.org), [Ivana
+  Malenica](https://github.com/podTockom), [Oleg
+  Sofrygin](https://github.com/osofr)"
 date: "`r lubridate::now()`"
 output:
   xaringan::moon_reader:
@@ -25,7 +28,7 @@ showtext::showtext.opts(dpi = 300)
 
 ### View them online:
 
-* [stat.berkeley.edu/~nhejazi/present/2017_sl3_intro/2017_sl3_intro.html](https://www.stat.berkeley.edu/~nhejazi/present/2017_sl3_intro/2017_sl3_intro.html)
+* [https://www.stat.berkeley.edu/~nhejazi/present/2017_sl3_intro/deck.html](https://www.stat.berkeley.edu/~nhejazi/present/2017_sl3_intro/deck.html)
 
 * here's a shortened URL: [https://goo.gl/bqP2tD](https://goo.gl/bqP2tD)
 
@@ -44,54 +47,88 @@ git clone -b talk https://github.com/jeremyrcoyle/sl3.git
 
 - This talk will focus on introducing the new `sl3` R package, which provides a
 modern implementation of the Super Learner algorithm [@vdl2007super], a method
-for performing stacked regressions [@breiman1996stacked] and combining this with
+for performing stacked regressions [@breiman1996stacked], combined with
 covariate screening and cross-validation.
 
 ---
 class: inverse, center, middle
 
-# `sl3`: The Core Design
+# Core `sl3` Design Principles
 
 ---
 
 # `sl3` Architecture
 
 All of the classes defined in `sl3` are based on the R6 framework, which brings
-an object-oriented paradigm to the R language.
+a newer object-oriented paradigm to the R language.
 
 ## Core classes
 
-- `task` - an object containing the data set of interest and specifying
-important features of the data (e.g., repeated measures).
+- `sl3_Task`, for defining a machine learning problem. These objects keep track
+  of the task data, as well as what variables play what roles in the machine
+  learning problem. These are easily created by `make_sl3_Task`.
 
 --
 
-- `lrnr_base` - a base class that serves as the foundation for other classes
-defined within `sl3`.
+- `Lrnr_base`, a base class for defining machine learning algorithms, as well as
+  _fits_ for those algorithms to particular `sl3_Task`s. Different learning
+  algorithms are defined in classes that inherit from this base class.
 
 --
 
-- `Pipeline` - a learner-type object created by chaining together screening and
-learning algorithms, allowing for covariate screening and model fitting to be
-subjected to the same cross-validation process.
+- `Pipeline`, a set of learners to be fit _sequentially_, where the fit from one
+  learner is used to define the task for the next learner. These are a special
+  kind of learner derived from `Lrnr_base`.
 
 --
 
-- `Stack` - a stacked regression model -- that is, a learner-type object created
-by combining different (independent) learners or pipelines.
+- `Stack`, like `Pipelines`, except in that learners are trained
+  _simultaneously_, so that their predictions can be either combined or
+  compared. These are a special kind of learner derived from `Lrnr_base`.
 
 ???
 
 - Probably good to point out that cross-validating a `Stack` allows for an
-included `Pipeline` to be subjected to CV in the same way as other learners
-(seriously awesome feature).
+  included `Pipeline` to be subjected to CV in the same way as other learners
+  (seriously awesome feature).
+- Might be worth mentioning the basic differences between core OOP concepts, for
+  example classes, objects, methods, fields, inheritance, etc.
+- Because all learners inherit from `Lrnr_base`, they have many features in
+  common, and can be used interchangeably.
+- All learners define three main methods: `train`, `predict`, and `chain`.
+- `Pipeline` allows for covariate screening and model fitting to be subjected to
+  the same cross-validation process, necessary for Super Learning.
+
+---
+
+# Object Oriented Programming (OOP)
+
+- The key concept of OOP is that of an object, a collection of data and
+  functions that corresponds to some conceptual unit. Objects have two main
+  types of elements: _fields_ and _methods_.
+  
+--
+
+- _fields_ are information about an object.
+- _methods_ are actions an object can perform.
+
+--
+
+- Objects are members of _classes_, which define what those specific fields and
+  methods are. Classes can inherit elements from other classes.
+  
+--
+
+- `sl3` is designed using basic OOP principles and the R6 OOP framework, in
+  which methods and fields of a class object are accessed using the `$`
+  operator.
 
 ---
 class: inverse, center, middle
 
 # `sl3` in Action
 
-## There ain't nothin' like a test drive...
+## ain't nothin' like a test drive...
 
 ---
 
@@ -107,23 +144,16 @@ if (!("sl3" %in% installed.packages())) {
 
 ```{r prelims-pkgs, message=FALSE, echo=FALSE}
 set.seed(49753)
-suppressMessages(library(data.table))
+library(data.table)
 library(dplyr)
 library(origami)
 library(SuperLearner)
-library(sl3)
 ```
 
 --
 
-- Work is underway to set up a [`drat`
-archive](http://dirk.eddelbuettel.com/code/drat.html) to host all stable
-versions of the package.
-
---
-
-- Of course, the package will eventually be available on CRAN, though a
-submission to this repository is still far down the road.
+- Of course, the package will be available on CRAN. An initial release is
+  forthcoming.
 
 --
 
@@ -137,17 +167,15 @@ library(sl3)
 
 # A "toy" data set
 
-We can't do any model fitting without data. We'll use the `cpp` data set,
-included with the package, for our experiment.
+We can't do any model fitting without data. We use data from the Collaborative
+Perinatal Project (CPP) to illustrate the features of `sl3` as well as its
+proper usage. For convenience, the data is included with the `sl3` R package.
 
 ```{r prelims-data, message=FALSE}
 # load example data set
-data(cpp)
-cpp <- cpp %>%
-  dplyr::filter(!is.na(haz)) %>%
-  mutate_all(funs(replace(., is.na(.), 0)))
+data(cpp_imputed)
 
-# here are the covariates we are interested in, and the outcome of course
+# here are the covariates we are interested in and, of course, the outcome
 covars <- c("apgar1", "apgar5", "parity", "gagebrth", "mage", "meducyrs",
             "sexn")
 outcome <- "haz"
@@ -155,33 +183,65 @@ outcome <- "haz"
 
 ???
 
-- A working implementation of a targeted learning approach to biomarker
-discovery using moderated statistics.
-
 - Next, we'll walk through analyzing some data.
 
 ---
 
-# Setting up a `Task`
+# Setting up `sl3_Task`s I
 
-Recall that a `Task` is the core structure that holds the data set and
+Recall that a `sl3_Task` is the core structure that holds the data set and
 specifications to be respected in the estimation/modeling procedure.
 
 ```{r sl3-task-setup, message=FALSE}
-task <- sl3_Task$new(cpp, covariates = covars, outcome = outcome)
+task <- make_sl3_Task(data = cpp_imputed, covariates = covars,
+                      outcome = outcome)
 ```
 
 --
 
-Data is in the nodes:
+- We use the `make_sl3_Task` method to create a new `sl3_Task`, called `task`.
+
+- Here, we specified the underlying data, `cpp_imputed`, and vectors indicating
+  which varaibles to use as covariates and outcomes.
+
+--
+
+- `make_sl3_Task` supports a range of options in order to facilitate the proper
+  articulation of more advanced specifics potentially informative of the machine
+  learning problem.
+  
+- For example, we can specify the id, weights, and offset nodes listed
+  previously.
+
+---
+
+# Setting up `sl3_Task`s II
+
+Let's take a look at the `task` that we set up:
 
 ```{r sl3-task-nodes, message=FALSE}
-task$nodes
+task
 ```
 
-???
+---
 
-- talk about tasks
+# Learners
+
+- `Lrnr_base` is the base class for defining machine learning algorithms, as
+  well as fits for those algorithms to particular `sl3_Tasks`.
+
+- Different machine learning algorithms are defined in classes that inherit from
+  `Lrnr_base` (e.g., the `Lrnr_glm` class inherits from `Lrnr_base`, and defines
+  a learner that fits generalized linear models).
+
+- We will use the term learners to refer to the family of classes that inherit
+  from `Lrnr_base`.
+  
+---
+
+Learner objects can be constructed from their class
+  definitions using the `make_learner` function:
+
 
 ---
 
@@ -309,6 +369,39 @@ head(preds_sl)
 
 - Worth mentioning that the flexibility offered by our design allows us to
 invoke the Super Learner algorithm, but we can also do a lot more...
+
+
+---
+class: inverse, center, middle
+
+# Extending the `sl3` package
+
+---
+class: inverse, center, middle
+
+# Computing with `delayed`
+
+---
+
+# ...
+
+```{r sl3-delayed-1, message=FALSE}
+metalearner <- make_learner(Lrnr_nnls)
+lrnr_glm <- make_learner(Lrnr_glm)
+lrnr_rf <- make_learner(Lrnr_randomForest)
+lrnr_glmnet <- make_learner(Lrnr_glmnet)
+sl <- Lrnr_sl$new(learners = list(lrnr_glm, lrnr_rf, lrnr_glmnet),
+                  metalearner = metalearner)
+delayed_sl_fit <- delayed_learner_train(sl, task)
+```
+
+---
+
+# ...
+
+```{r sl3-delayed-2, message=FALSE}
+plot(delayed_sl_fit)
+```
 
 ---
 class: center, middle
