@@ -223,6 +223,25 @@ sl3_Task <- R6Class(classname = "sl3_Task",
 
                         return(new_task)
                       },
+                      fold_specific_task = function(){
+                        old_folds <- self$folds
+                        index_vec <- rep(seq_len(self$nrow),length(old_folds))
+                        fs_data <- self$data[index_vec]
+                        fold_to_fs_fold <- function(fold,n){
+                          fold_num=fold_index()
+                          offset=(fold_num-1)*n
+                          fs_training=training()+offset
+                          fs_validation=validation()+offset
+                          return(list(fs_fold=make_fold(fold_num, fs_training, fs_validation)))
+                        }
+                        
+                        result<-cross_validate(fold_to_fs_fold, old_folds, n=self$nrow)
+                        fs_folds <- result$fs_fold
+                        new_task <- self$clone()
+                        new_task$initialize(fs_data, nodes=self$nodes, folds=fs_folds, outcome_type = self$outcome_type)
+                        
+                        return(new_task)
+                      },
                       get_data = function(rows = NULL, columns){
 
 

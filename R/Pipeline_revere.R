@@ -1,10 +1,9 @@
-#' Pipeline (chain) of learners. 
+#' Cross-validation Pipeline (chain) of learners. 
 #'
-#' A Pipeline of learners is a way to "chain" Learners together, where the output of one learner is used as output for the next learner. 
-#' This can be used for things like screening, two stage machine learning methods, and Super Learning. 
-#' A pipeline is fit by fitting the first \code{Learner}, calling \code{chain()} to create the next task, 
-#' which becomes the training data for the next \code{Learner}. 
-#' Similarly, for prediction, the predictions from the first \code{Learner} become the data to predict on for the next \code{Learner}.
+#' An extension of \code{\link{Pipeline}} that chains cross-claidate tasks in a computationally efficient, but statistically valid way.
+#' The pipeline will be a mix of cross-validated steps (defined by \code{\link{Lrnr_cv}}) and non-cross-validated steps (defined by any other learner).
+#' For the cross-validated steps, separate learner fits will be maintained for each fold, fit on separate training tasks. 
+#' For other steps, there is one learner fit that is shared across folds, fit on a pooled validation task.
 #' @docType class
 #' @importFrom R6 R6Class
 #' @export
@@ -19,56 +18,12 @@
 #' }
 #' @template common_parameters
 #' @importFrom assertthat assert_that is.count is.flag
-Pipeline <- R6Class(classname = "Pipeline",
-                    inherit= Lrnr_base,
+Pipeline_revere <- R6Class(classname = "Pipeline_revere",
+                    inherit= Pipeline,
                     portable = TRUE,
                     class = TRUE,
                     public = list(
-                      initialize = function(...) {
-                        learners=list(...)
-                        
-                        if(length(learners)==1){
-                          if(inherits(learners[[1]],"Pipeline")){
-                            # if we were passed a Pipeline (instead of learners as separate parameters), just copy that Pipelines's learners
-                            learners <- learners[[1]]$params$learners
-                          } else if(is.list(learners[[1]])){
-                            # if we were passed a list of learners (instead of learners as separate parameters), use that list
-                            learners <- learners[[1]]
-                          }
-                        }
-                        
-                        # if the first learner is a pipeline, replicate it in this object and extend it instead of nesting pipelines
-                        if(inherits(learners[[1]], "Pipeline")){
-                          old_pipe <- learners[[1]]
-                          new_learners <- learners[-1]
-                          super$initialize(params=list(learners=old_pipe$params$learners))
-                          
-                          private$.fit_object <- old_pipe$fit_object
-                          private$.training_task <- old_pipe$training_task
-                          self$extend(new_learners)
-                        } else {
-                          # otherwise, continue constructing a new pipe
-                          super$initialize(params=list(learners=learners))   
-                          learners_trained <- sapply(learners,`[[`,"is_trained")
-                          if(all(learners_trained)){
-                            # we've been passed a list of existing fits so we're already fit
-                            private$.fit_object <- list(learner_fits=learners)
-                            private$.training_task <- learners[[1]]$training_task
-                            
-                          }
-                          
-                        }
-                        
-                        invisible(self)
-                      },
-                      
-                      print = function(){
-                        if(!self$is_trained){
-                          lapply(self$params$learners,print)
-                        } else {
-                          lapply(private$.fit_object,print)
-                        }
-                      },
+
                       extend = function(new_learner){
                         if(is.list(new_learner) && length(new_learner)==1){
                           new_learner <- new_learner[[1]]
@@ -105,19 +60,31 @@ Pipeline <- R6Class(classname = "Pipeline",
                     ),
                     private = list(
                       .train_sublearners = function(task){
-                        learners=self$params$learners
-                        learner_names=sapply(learners,function(learner)learner$name)
-                        learner_fits=as.list(rep(NA,length(learners)))
-                        names(learner_fits)=learner_names
+                        fs_task <- task$fold_specific_task()
+                        learners <- self$params$learners
+                        learner_names <- sapply(learners,function(learner)learner$name)
+                        learner_fits <- as.list(rep(NA,length(learners)))
+                        names(learner_fits) <- learner_names
                         
-                        current_task=task
+                        current_task <- task
+                        current_fs_task <- fs_task
                         for(i in seq_along(learners)){
-                          current_learner=learners[[i]]
-                          fit = delayed_learner_train(current_learner, current_task)
-                          next_task=delayed_learner_fit_chain(fit, current_task)
-                          learner_fits[[i]]=fit
+                          current_learner <- learners[[i]]
+                          if(inherits(current_learner, "Lrnr_cv")){
+                            # fit with split-specific task
+                            fit <- delayed_learner_train(current_learner, current_fs_task)
+                            next_fs_task <- delayed_learner_fit_chain(fit, current_fs_task, component="both")
+                          } else {
+                            # fit with validation task
+                            fit <- delayed_learner_train(current_learner, current_task)  
+                            next_fs_task <- delayed_learner_fit_chain(fit, current_fs_task)
+                          }
+                            
+                          next_task <- delayed_learner_fit_chain(fit, current_task)
+                          learner_fits[[i]] <- fit
                           
-                          current_task=next_task
+                          current_task <- next_task
+                          current_fs_task <- next_fs_task
                         }
                         
                         return(bundle_delayed(learner_fits))
@@ -150,7 +117,3 @@ Pipeline <- R6Class(classname = "Pipeline",
                     )
                     
 )
-
-`%|%` <- function(learner_1, learner_2){
-  return(make_learner(Pipeline, learner_1, learner_2))
-}

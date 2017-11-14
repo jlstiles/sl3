@@ -51,16 +51,16 @@ Lrnr_base <- R6Class(classname = "Lrnr_base",
 
                          return(outcome_type)
                        },
-                       base_train = function(task, trained_sublearners = NULL) {
+                       base_train = function(task, trained_sublearners = NULL, ...) {
                          #trains learner to data
                          assert_that(is(task,"sl3_Task"))
 
                          #todo: add error handling
                          subsetted_task = self$subset_covariates(task)
                          if(!is.null(trained_sublearners)){
-                           fit_object = private$.train(subsetted_task, trained_sublearners)
+                           fit_object = private$.train(subsetted_task, trained_sublearners, ...)
                          } else {
-                           fit_object = private$.train(subsetted_task)
+                           fit_object = private$.train(subsetted_task, ...)
                          }
                          new_object = self$clone() # copy parameters, and whatever else
                          new_object$set_train(fit_object, task)
@@ -82,7 +82,7 @@ Lrnr_base <- R6Class(classname = "Lrnr_base",
                            stop("Learner has not yet been train to data. Call learner$train(task) first.")
                          }
                        },
-                       base_predict = function(task = NULL){
+                       base_predict = function(task = NULL, ...){
                          self$assert_trained()
 
                          if(is.null(task)){
@@ -92,7 +92,7 @@ Lrnr_base <- R6Class(classname = "Lrnr_base",
                          }
                          assert_that(is(task,"sl3_Task"))
                          subsetted_task = self$subset_covariates(task)
-                         predictions = private$.predict(subsetted_task)
+                         predictions = private$.predict(subsetted_task, ...)
                          
                          ncols <- ncol(predictions)
                          if(!is.null(ncols)&&(ncols==1)){
@@ -101,7 +101,7 @@ Lrnr_base <- R6Class(classname = "Lrnr_base",
                          return(predictions)
                        },
 
-                       base_chain = function(task = NULL){
+                       base_chain = function(task = NULL, ...){
                          self$assert_trained()
 
                          if(is.null(task)){
@@ -111,7 +111,7 @@ Lrnr_base <- R6Class(classname = "Lrnr_base",
                          }
                          assert_that(is(task,"sl3_Task"))
                          subsetted_task = self$subset_covariates(task)
-                         next_task = private$.chain(subsetted_task)
+                         next_task = private$.chain(subsetted_task, ...)
 
                          return(next_task)
 
@@ -119,16 +119,16 @@ Lrnr_base <- R6Class(classname = "Lrnr_base",
                        train_sublearners = function(task){
                          return(private$.train_sublearners(task))
                        },
-                       train = function(task){
-                         delayed_fit <- delayed_learner_train(self, task)
+                       train = function(task, ...){
+                         delayed_fit <- delayed_learner_train(self, task, ...)
                          return(delayed_fit$compute())
                        },
-                       predict = function(task = NULL){
-                         delayed_preds <- delayed_learner_fit_predict(self, task)
+                       predict = function(task = NULL, ...){
+                         delayed_preds <- delayed_learner_fit_predict(self, task, ...)
                          return(delayed_preds$compute())
                        },
-                       chain = function(task = NULL){
-                         delayed_chained <- delayed_learner_fit_chain(self, task)
+                       chain = function(task = NULL, ...){
+                         delayed_chained <- delayed_learner_fit_chain(self, task, ...)
                          return(delayed_chained$compute())
                        },
                        print = function(){
@@ -210,15 +210,15 @@ Lrnr_base <- R6Class(classname = "Lrnr_base",
                          #train sublearners here
                          return(NULL)
                        },
-                       .train = function(task){
-                         stop("Learner is meant to be abstract, you should instead use specific learners. See listLearners()")
+                       .train = function(task, ...){
+                         stop("Lrnr_base is meant to be abstract, you should instead use specific learners. See sl3_list_learners()")
                        },
-                       .predict = function(task){
+                       .predict = function(task, ...){
                          predictions = predict(private$.fit_object, newdata=task$X)
                          return(predictions)
                        },
-                       .chain = function(task){
-                         predictions = self$predict(task)
+                       .chain = function(task, ...){
+                         predictions = self$predict(task, ...)
                          predictions = as.data.table(predictions)
 
                          #add predictions as new columns

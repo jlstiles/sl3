@@ -16,18 +16,18 @@ learner_train(learner, task, trained_sublearners)
 
 delayed_learner_train(learner, task)
 
-learner_fit_predict(learner_fit, task = NULL)
+learner_fit_predict(learner_fit, task = NULL, ...)
 
-delayed_learner_fit_predict(learner_fit, task = NULL)
+delayed_learner_fit_predict(learner_fit, task = NULL, ...)
 
-learner_fit_chain(learner_fit, task = NULL)
+learner_fit_chain(learner_fit, task = NULL, ...)
 
-delayed_learner_fit_chain(learner_fit, task = NULL)
+delayed_learner_fit_chain(learner_fit, task = NULL, ...)
 }
 \arguments{
 \item{learner_class}{the learner class to instantiate}
 
-\item{...}{parameters with which to instantiate the learner}
+\item{...}{Extra parameters}
 
 \item{learner}{a learner object to fit to the task}
 

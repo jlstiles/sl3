@@ -49,10 +49,21 @@ Lrnr_cv <- R6Class(classname = "Lrnr_cv",
                        task <- self$training_task
                        risks <- apply(preds, 2, risk, task$Y, loss, task$weights)
                      },
+                     train_fold_specific = function(fold_tasks){
+                       
+                     },
+                     predict_fold_specific = function(fold_tasks){
+                       self$assert_trained()
+                       fold_fit <- private$.fit_object$fold_fits[[fold_num]]
+                       return(fold_fit$predict(task))
+                     },
+                     chain_fold_specific = function(fold_tasks){
+                       self$assert_trained()
+                       fold_fit <- private$.fit_object$fold_fits[[fold_num]]
+                       return(fold_fit$chain(task))
+                     },
                      print = function(){
-                       print("Lrnr_cv")
-                       print(self$params$learner)
-                       #todo: check if fit
+                       print(sprintf("Lrnr_cv(%s)",self$params$learner$name))
                      }),
                    active = list(
                      name = function(){
@@ -61,7 +72,7 @@ Lrnr_cv <- R6Class(classname = "Lrnr_cv",
                    ),
                    private = list(
                      .properties = c("wrapper"),
-                     .train_sublearners = function(task){
+                     .train_sublearners = function(task, folds=NULL){
                        #prefer folds from params, but default to folds from task
                        folds <- self$params$folds
                        if(is.null(folds)){
@@ -91,7 +102,7 @@ Lrnr_cv <- R6Class(classname = "Lrnr_cv",
                        return(result)
                      },
 
-                     .train = function(task, trained_sublearners) {
+                     .train = function(task, trained_sublearners, folds=NULL) {
                        #prefer folds from params, but default to folds from task
                        folds=self$params$folds
                        if(is.null(folds)){
@@ -127,25 +138,34 @@ Lrnr_cv <- R6Class(classname = "Lrnr_cv",
                        return(fit_object)
                      },
 
-                     .predict = function(task){
-                       # if(!identical(task,private$.training_task)){
-                       #   stop("task must match training task for Lrnr_cv")
-                       # }
-                       #doing train and predict like this is stupid, but that's the paradigm (for now!)
-                       folds=private$.fit_object$folds
+                     .predict = function(task,component="validation"){
+                       folds=task$folds
                        fold_fits = private$.fit_object$fold_fits
+                       
+                       
 
                        cv_predict=function(fold,fold_fits,task){
-                         validation_task=validation(task)
-                         index=validation()
+                         if(component=="validation"){
+                          index=validation()
+                         } else if(component=="both"){
+                          index=c(training(), validation())
+                         } else{
+                           stop("Unsupported component argument to Lrnr_cv$predict")
+                         }
+                         
+                         pred_task=task[index]
+                         
                          fit=fold_index(fold_fits)[[1]]
-                         predictions=fit$base_predict(validation_task)
+                         predictions=fit$base_predict(pred_task)
+                         predictions=as.data.table(predictions)
                          list(index=index,predictions=predictions)
                        }
 
                        # fold_predictions=cross_validate(cv_predict,folds,fold_fits,task, future.globals=F)
                        # don't use cross_validate as it will call future_lapply
                        fold_predictions=lapply(folds,cv_predict, fold_fits, task)
+                       
+                       # reoder predictions to match task observations
                        index=unlist(lapply(fold_predictions,`[[`,"index"))
                        predictions=data.table::rbindlist(lapply(fold_predictions,`[[`,"predictions"))
                        predictions=aorder(predictions, order(index))

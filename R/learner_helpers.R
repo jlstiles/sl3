@@ -6,7 +6,7 @@
 
 #' Learner helpers
 #' @param learner_class the learner class to instantiate
-#' @param ... parameters with which to instantiate the learner
+#' @param ... Extra parameters
 #' @rdname learner_helpers
 #' @export
 delayed_make_learner <- function(learner_class, ...){
@@ -19,15 +19,15 @@ delayed_make_learner <- function(learner_class, ...){
 #' @param trained_sublearners any data obtained from a train_sublearners step
 #' @rdname learner_helpers
 #' @export
-learner_train <- function(learner, task, trained_sublearners){
-  learner$base_train(task, trained_sublearners)
+learner_train <- function(learner, task, trained_sublearners, ...){
+  learner$base_train(task, trained_sublearners, ...)
 }
 
 #' @rdname learner_helpers
 #' @export
-delayed_learner_train <- function(learner, task){
-  trained_sublearners <- learner$train_sublearners(task)
-  train_delayed <- delayed_fun(learner_train)(learner, task, trained_sublearners)
+delayed_learner_train <- function(learner, task, ...){
+  trained_sublearners <- learner$train_sublearners(task, ...)
+  train_delayed <- delayed_fun(learner_train)(learner, task, trained_sublearners, ...)
   train_delayed$name <- learner$name
   if(!is.null(trained_sublearners)){
     #if a learner is sequential assume the train step is minimal and don't parallelize
@@ -40,28 +40,28 @@ delayed_learner_train <- function(learner, task){
 #' @param learner_fit a learner object that has already been fit
 #' @rdname learner_helpers
 #' @export
-learner_fit_predict <- function(learner_fit, task = NULL){
-  learner_fit$base_predict(task)
+learner_fit_predict <- function(learner_fit, task = NULL, ...){
+  learner_fit$base_predict(task, ...)
 }
 
 #' @rdname learner_helpers
 #' @export
-delayed_learner_fit_predict <- function(learner_fit, task=NULL){
-  pred_delayed <- delayed_fun(learner_fit_predict, sequential = TRUE)(learner_fit, task)
+delayed_learner_fit_predict <- function(learner_fit, task=NULL, ...){
+  pred_delayed <- delayed_fun(learner_fit_predict, sequential = TRUE)(learner_fit, task, ...)
   pred_delayed$name <- "predict"
   return(pred_delayed)
 }
 
 #' @rdname learner_helpers
 #' @export
-learner_fit_chain <- function(learner_fit, task = NULL){
-  learner_fit$base_chain(task)
+learner_fit_chain <- function(learner_fit, task = NULL, ...){
+  learner_fit$base_chain(task, ...)
 }
 
 #' @rdname learner_helpers
 #' @export
-delayed_learner_fit_chain <- function(learner_fit, task = NULL){
-  chain_delayed <- delayed_fun(learner_fit_chain, sequential = TRUE)(learner_fit, task)
+delayed_learner_fit_chain <- function(learner_fit, task = NULL, ...){
+  chain_delayed <- delayed_fun(learner_fit_chain, sequential = TRUE)(learner_fit, task, ...)
   chain_delayed$name <- "chain"
   return(chain_delayed)
 }
