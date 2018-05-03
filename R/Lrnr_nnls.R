@@ -70,4 +70,3 @@ Lrnr_nnls <- R6Class(
     .required_packages = c("nnls")
   ),
 )
-
