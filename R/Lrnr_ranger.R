@@ -43,13 +43,14 @@ Lrnr_ranger <- R6Class(
   ),
   
   private = list(
-    .properties = c("continuous", "binomial", "categorical"),
+    .properties = c("continuous", "binomial", "categorical", "weights"),
     
     .train = function(task) {
       args <- self$params
       data_in <- cbind(task$Y, task$X)
       colnames(data_in)[1] <- task$nodes$outcome
       args$data <- data_in
+      args$case.weights = task$weights
       args$dependent.variable.name <- task$nodes$outcome
       fit_object <- call_with_args(ranger::ranger, args)
       return(fit_object)
