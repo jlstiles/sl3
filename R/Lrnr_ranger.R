@@ -50,7 +50,7 @@ Lrnr_ranger <- R6Class(
       data_in <- cbind(task$Y, task$X)
       colnames(data_in)[1] <- task$nodes$outcome
       args$data <- data_in
-      args$case.weights = task$weights
+      # args$case.weights = task$weights
       args$dependent.variable.name <- task$nodes$outcome
       fit_object <- call_with_args(ranger::ranger, args)
       return(fit_object)
