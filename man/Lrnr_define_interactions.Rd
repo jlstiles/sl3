@@ -20,6 +20,8 @@ This learner adds interactions to its chained task
 \describe{
 \item{\code{interactions}}{A list of lists, with each inner list containing
 the covariates to create an interaction for.}
+\item{\code{warn_on_existing}: If TRUE, produce a warning if there is already
+a column with a name matching this interaction term.}
 }
 }
 
@@ -36,15 +38,16 @@ Other Learners: \code{\link{Custom_chain}},
   \code{\link{Lrnr_independent_binomial}},
   \code{\link{Lrnr_lstm}}, \code{\link{Lrnr_mean}},
   \code{\link{Lrnr_nnls}}, \code{\link{Lrnr_optim}},
+  \code{\link{Lrnr_pca}},
   \code{\link{Lrnr_pkg_SuperLearner}},
   \code{\link{Lrnr_randomForest}},
   \code{\link{Lrnr_ranger}}, \code{\link{Lrnr_rugarch}},
   \code{\link{Lrnr_sl}}, \code{\link{Lrnr_solnp_density}},
   \code{\link{Lrnr_solnp}}, \code{\link{Lrnr_step}},
   \code{\link{Lrnr_subset_covariates}},
-  \code{\link{Lrnr_tsDyn}}, \code{\link{Lrnr_xgboost}},
-  \code{\link{Pipeline}}, \code{\link{Stack}},
-  \code{\link{define_h2o_X}},
+  \code{\link{Lrnr_svm}}, \code{\link{Lrnr_tsDyn}},
+  \code{\link{Lrnr_xgboost}}, \code{\link{Pipeline}},
+  \code{\link{Stack}}, \code{\link{define_h2o_X}},
   \code{\link{undocumented_learner}}
 }
 \keyword{data}
