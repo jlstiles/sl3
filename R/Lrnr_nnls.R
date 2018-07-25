@@ -64,7 +64,7 @@ Lrnr_nnls <- R6Class(
     },
 
     .predict = function(task = NULL) {
-      predictions <- as.matrix(task$X) %*% coef(private$.fit_object)/sum(coef(private$.fit_object))
+      predictions <- as.matrix(task$X) %*% coef(private$.fit_object)
       return(predictions)
     },
     .required_packages = c("nnls")
